@@ -60,24 +60,37 @@ ${oosItems.length ? `\n⚠️ Out of Stock (${oosItems.length}): ${oosItems.map(
 _Powered by Kirana Smart Orders_`
 
   return (
-    <div className="px-4 pt-6 pb-28 space-y-5 max-w-lg mx-auto">
+    <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
-            {format(new Date(selectedDate), 'EEEE, d MMM')}
-          </p>
-          <h1 className="text-2xl font-bold text-zinc-900 mt-0.5 tracking-tight">End of Day</h1>
-        </div>
-        <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-          <Sun size={20} className="text-amber-500" />
+      {/* ── Hero header ─────────────────────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden px-4 pt-10 pb-8"
+        style={{ background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 55%, #fbbf24 100%)' }}
+      >
+        <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full opacity-[0.12] bg-white" />
+        <div className="absolute bottom-2 -left-6 w-32 h-32 rounded-full opacity-[0.08] bg-white" />
+
+        <div className="relative max-w-lg mx-auto flex items-start justify-between">
+          <div>
+            <p className="text-amber-200 text-xs font-bold uppercase tracking-[0.12em]">
+              {format(new Date(selectedDate), 'EEEE, d MMM yyyy')}
+            </p>
+            <h1 className="text-white text-2xl font-extrabold mt-1 tracking-tight">Day Summary</h1>
+            <p className="text-amber-100/80 text-xs mt-1 font-medium">
+              {totalOrders === 0 ? 'No orders recorded' : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} · ₹${collected.toLocaleString('en-IN')} collected`}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+            <Sun size={20} className="text-white" />
+          </div>
         </div>
       </div>
 
+      <div className="px-4 pt-5 max-w-lg mx-auto space-y-5">
+
       {/* Date picker */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-zinc-500">Report Date</label>
+        <label className="field-label">Report Date</label>
         <input
           type="date"
           className="input-field"
@@ -89,12 +102,12 @@ _Powered by Kirana Smart Orders_`
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3">
-        <StatCard icon={<ShoppingBag size={18} />}  label="Total Orders"   value={totalOrders}       sub="for the day"   color="emerald" />
-        <StatCard icon={<TrendingUp size={18} />}    label="Collected"      value={`₹${collected}`}   sub="cash received" color="sky" />
-        <StatCard icon={<Package size={18} />}       label="Fulfilled"      value={fulfilled}          sub="orders"        color="violet" />
-        <StatCard icon={<Users size={18} />}         label="Credit Issued"  value={`₹${creditTotal}`} sub={`${creditOrders.length} orders`} color="orange" />
-        <StatCard icon={<Clock size={18} />}         label="Pending"        value={pending}            sub="orders"        color="amber" />
-        <StatCard icon={<XCircle size={18} />}       label="Cancelled"      value={missed}             sub="orders"        color="zinc" />
+        <StatCard icon={<ShoppingBag size={17} />}  label="Total Orders"   value={totalOrders}                                    sub="for the day"              color="emerald" />
+        <StatCard icon={<TrendingUp size={17} />}    label="Collected"      value={`₹${collected.toLocaleString('en-IN')}`}        sub="cash received"            color="sky" />
+        <StatCard icon={<Package size={17} />}       label="Fulfilled"      value={fulfilled}                                      sub="orders"                   color="violet" />
+        <StatCard icon={<Users size={17} />}         label="Credit Issued"  value={`₹${creditTotal.toLocaleString('en-IN')}`}      sub={`${creditOrders.length} orders`} color="orange" />
+        <StatCard icon={<Clock size={17} />}         label="Pending"        value={pending}                                        sub="orders"                   color="amber" />
+        <StatCard icon={<XCircle size={17} />}       label="Cancelled"      value={missed}                                         sub="orders"                   color="zinc" />
       </div>
 
       {/* Udhaar overview */}
@@ -164,9 +177,9 @@ _Powered by Kirana Smart Orders_`
       )}
 
       {/* Summary preview */}
-      <div className="card space-y-2">
-        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Summary Preview</p>
-        <pre className="text-xs text-zinc-600 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-xl px-3 py-3">{summaryText}</pre>
+      <div className="card space-y-2.5">
+        <p className="section-label px-0.5">Summary Preview</p>
+        <pre className="text-xs text-zinc-600 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
       </div>
 
       {/* Actions */}
@@ -184,29 +197,30 @@ _Powered by Kirana Smart Orders_`
         </button>
       </div>
 
+      </div>{/* end page content */}
     </div>
   )
 }
 
 function StatCard({ icon, label, value, sub, color }) {
   const colors = {
-    emerald: 'text-emerald-500 bg-emerald-50',
-    sky:     'text-sky-500 bg-sky-50',
-    violet:  'text-violet-500 bg-violet-50',
-    orange:  'text-orange-500 bg-orange-50',
-    amber:   'text-amber-500 bg-amber-50',
-    zinc:    'text-zinc-400 bg-zinc-100',
+    emerald: 'text-emerald-600 bg-emerald-500/10',
+    sky:     'text-sky-600 bg-sky-500/10',
+    violet:  'text-violet-600 bg-violet-500/10',
+    orange:  'text-orange-600 bg-orange-500/10',
+    amber:   'text-amber-600 bg-amber-500/10',
+    zinc:    'text-zinc-400 bg-zinc-500/10',
   }
   const iconCls = colors[color] || colors.zinc
 
   return (
-    <div className="card text-left">
-      <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${iconCls}`}>
+    <div className="card-elevated text-left animate-fade-up">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconCls}`}>
         {icon}
       </div>
-      <p className="text-xl font-bold text-zinc-900 tracking-tight">{value}</p>
-      <p className="text-[11px] font-semibold text-zinc-400 mt-0.5 uppercase tracking-wide">{label}</p>
-      <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>
+      <p className="text-xl font-extrabold text-zinc-900 tracking-tight tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] font-bold text-zinc-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
+      <p className="text-[11px] text-zinc-400 mt-0.5 font-medium">{sub}</p>
     </div>
   )
 }

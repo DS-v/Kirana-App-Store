@@ -1,114 +1,168 @@
 /**
  * ImageOrderScanner
  *
- * Drop-in panel for the Orders "New Order" form.
- * Lets the shopkeeper upload or photograph an order image
- * (handwritten slip, WhatsApp screenshot, printed list),
- * runs OCR, then calls onTextReady(extractedText) so the
- * parent can feed it into parseOrderMessage().
+ * Lets the shopkeeper photograph or upload an order image.
+ * The image is sent directly to a vision LLM (Groq llama-4-scout → Gemini 2.0),
+ * which performs OCR + semantic product matching in one step — no Tesseract,
+ * no rule-based parsing, no intermediate text editing.
  *
  * Props
- *  onTextReady(text)  — called with the raw OCR string
- *  onError(msg)       — called when OCR fails
+ *   onItemsReady({ items, unrecognised, source })
+ *       Called with AI-matched order items ready to drop into the order form.
+ *   onError(msg)  — called when the vision API fails completely
  */
 
 import { useState, useRef } from 'react'
-import { Camera, ImageIcon, X, RefreshCw, Languages } from 'lucide-react'
-// ocr is loaded lazily inside processFile() so the ~500 kB Tesseract chunk
-// is only downloaded when the shopkeeper actually uses the scanner.
-async function getOCR() {
-  return import('../utils/ocr')
-}
+import { Camera, ImageIcon, X, Sparkles, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
+import useStore from '../store/useStore'
+import supabase from '../lib/supabase'
 
 const PHASES = {
   IDLE:       'idle',
-  PROCESSING: 'processing',
-  PREVIEW:    'preview',   // OCR done — showing text for review before parsing
+  PROCESSING: 'processing',   // compressing + sending to vision API
+  RESULT:     'result',       // items returned, showing preview
   ERROR:      'error',
 }
 
-export default function ImageOrderScanner({ onTextReady, onError }) {
+const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+// Compress image to max 1024px / JPEG 85% before sending — keeps payload small
+async function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 1024
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+      const w = Math.round(img.width  * scale)
+      const h = Math.round(img.height * scale)
+
+      const canvas = document.createElement('canvas')
+      canvas.width  = w
+      canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+
+      URL.revokeObjectURL(url)
+      canvas.toBlob(blob => {
+        if (!blob) return reject(new Error('Canvas compression failed'))
+        const reader = new FileReader()
+        reader.onload = e => {
+          // e.target.result is "data:image/jpeg;base64,<data>"
+          const [header, b64] = e.target.result.split(',')
+          const mimeType = header.match(/:(.*?);/)[1]
+          resolve({ imageBase64: b64, mimeType, dataUrl: e.target.result })
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      }, 'image/jpeg', 0.85)
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+export default function ImageOrderScanner({ onItemsReady, onError }) {
+  const products = useStore(s => s.products)
+
   const [phase, setPhase]         = useState(PHASES.IDLE)
-  const [imgSrc, setImgSrc]       = useState(null)    // data-URL for preview
-  const [ocrPct, setOcrPct]       = useState(0)
-  const [rawText, setRawText]     = useState('')       // editable OCR result
-  const [useHindi, setUseHindi]   = useState(false)   // toggle Hindi+Eng model
+  const [imgSrc, setImgSrc]       = useState(null)
+  const [aiItems, setAiItems]     = useState([])
+  const [aiUnrec, setAiUnrec]     = useState([])
+  const [aiSource, setAiSource]   = useState('')
   const [errMsg, setErrMsg]       = useState('')
-  const fileRef  = useRef(null)
+
+  const fileRef   = useRef(null)
   const cameraRef = useRef(null)
 
   function reset() {
     setPhase(PHASES.IDLE)
     setImgSrc(null)
-    setOcrPct(0)
-    setRawText('')
+    setAiItems([])
+    setAiUnrec([])
+    setAiSource('')
     setErrMsg('')
+    // Reset file inputs so the same file can be re-selected
+    if (fileRef.current)   fileRef.current.value   = ''
+    if (cameraRef.current) cameraRef.current.value = ''
   }
 
   async function processFile(file) {
     if (!file) return
-    // Show thumbnail immediately
-    const reader = new FileReader()
-    reader.onload = e => setImgSrc(e.target.result)
-    reader.readAsDataURL(file)
-
     setPhase(PHASES.PROCESSING)
-    setOcrPct(0)
+
+    // Show thumbnail immediately while compression runs
+    const previewUrl = URL.createObjectURL(file)
+    setImgSrc(previewUrl)
 
     try {
-      const lang = useHindi ? 'hin+eng' : 'eng'
-      const { runOCR, looksLikeOrderText } = await getOCR()
-      const text = await runOCR(file, {
-        lang,
-        onProgress: pct => setOcrPct(pct),
+      // 1 — compress
+      const { imageBase64, mimeType } = await compressImage(file)
+
+      // 2 — get auth token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Not signed in')
+
+      // 3 — build slim catalog (id + name + aliases + unit only)
+      const catalog = products.map(p => ({
+        id:    p.id,
+        name:  p.name,
+        unit:  p.unit,
+        ...(p.aliases?.length ? { aliases: p.aliases } : {}),
+      }))
+
+      // 4 — call vision LLM
+      const resp = await fetch(`${BACKEND}/api/llm/parse-image`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ imageBase64, mimeType, catalog }),
+        signal: AbortSignal.timeout(20_000),   // vision is slower than text
       })
 
-      if (!looksLikeOrderText(text)) {
-        // OCR ran but result looks like noise — still show it so user can edit
-        setRawText(text)
-        setPhase(PHASES.PREVIEW)
-        onError?.('Low-quality scan — please review the extracted text before parsing.')
-        return
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error || `Vision API error ${resp.status}`)
       }
 
-      setRawText(text)
-      setPhase(PHASES.PREVIEW)
+      const { items, unrecognised, source } = await resp.json()
+
+      // 5 — enrich with price / inStock from local catalog
+      const enriched = items.map(it => {
+        const p = products.find(p => p.id === it.productId)
+        return { ...it, price: p?.price ?? 0, inStock: p?.inStock ?? true, unit: it.unit ?? p?.unit ?? 'pc' }
+      })
+
+      setAiItems(enriched)
+      setAiUnrec(unrecognised)
+      setAiSource(source)
+      setPhase(PHASES.RESULT)
+
     } catch (e) {
-      setErrMsg(e.message || 'OCR failed')
+      URL.revokeObjectURL(previewUrl)
+      setErrMsg(e.message || 'Vision AI failed')
       setPhase(PHASES.ERROR)
       onError?.(e.message)
     }
   }
 
-  function handleParseClick() {
-    if (rawText.trim()) onTextReady(rawText)
+  function handleUseItems() {
+    onItemsReady({ items: aiItems, unrecognised: aiUnrec, source: aiSource })
     reset()
   }
 
-  // ── IDLE ──────────────────────────────────────────────────────────────────
+  // ── IDLE ─────────────────────────────────────────────────────────────────────
   if (phase === PHASES.IDLE) {
     return (
       <div className="border border-dashed border-zinc-200 rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-zinc-700 flex items-center gap-1.5">
-            <ImageIcon size={13} className="text-zinc-400" />
-            Scan order image
-          </p>
-          {/* Hindi toggle */}
-          <button
-            onClick={() => setUseHindi(h => !h)}
-            className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
-              useHindi ? 'bg-orange-50 text-orange-600' : 'bg-zinc-100 text-zinc-500'
-            }`}
-            title="Enable Hindi (Devanagari) OCR — adds ~10 MB download"
-          >
-            <Languages size={10} />
-            {useHindi ? 'Hindi+Eng' : 'English'}
-          </button>
+        <div className="flex items-center gap-1.5">
+          <Sparkles size={13} className="text-violet-400" />
+          <p className="text-xs font-semibold text-zinc-700">Scan order image with AI</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          {/* Camera capture — opens rear camera on mobile */}
           <label className="flex flex-col items-center gap-2 py-4 bg-zinc-50 rounded-xl cursor-pointer active:scale-95 transition-transform hover:bg-zinc-100">
             <Camera size={20} className="text-zinc-500" />
             <span className="text-xs font-semibold text-zinc-600">Take Photo</span>
@@ -122,7 +176,6 @@ export default function ImageOrderScanner({ onTextReady, onError }) {
             />
           </label>
 
-          {/* File picker — screenshots, saved images */}
           <label className="flex flex-col items-center gap-2 py-4 bg-zinc-50 rounded-xl cursor-pointer active:scale-95 transition-transform hover:bg-zinc-100">
             <ImageIcon size={20} className="text-zinc-500" />
             <span className="text-xs font-semibold text-zinc-600">Upload Image</span>
@@ -137,49 +190,50 @@ export default function ImageOrderScanner({ onTextReady, onError }) {
         </div>
 
         <p className="text-[10px] text-zinc-400 text-center">
-          Works with WhatsApp screenshots, handwritten slips &amp; printed lists
+          AI reads handwriting, abbreviations & Hindi — no OCR step needed
         </p>
       </div>
     )
   }
 
-  // ── PROCESSING ────────────────────────────────────────────────────────────
+  // ── PROCESSING ───────────────────────────────────────────────────────────────
   if (phase === PHASES.PROCESSING) {
     return (
-      <div className="border border-zinc-100 rounded-xl p-4 space-y-3">
+      <div className="border border-violet-100 bg-violet-50/30 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-3">
           {imgSrc && (
             <img src={imgSrc} alt="scan" className="w-14 h-14 object-cover rounded-lg flex-shrink-0 border border-zinc-100" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-zinc-800">Reading image…</p>
+            <p className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+              <Sparkles size={12} className="text-violet-500" />
+              AI reading image…
+            </p>
             <p className="text-[10px] text-zinc-400 mt-0.5">
-              {useHindi ? 'Downloading Hindi OCR data (~10 MB first time)' : 'Extracting text'}
+              Recognising text, matching products to your catalog
             </p>
           </div>
-          <RefreshCw size={16} className="text-emerald-500 animate-spin flex-shrink-0" />
+          <RefreshCw size={16} className="text-violet-500 animate-spin flex-shrink-0" />
         </div>
 
-        {/* Progress bar */}
-        <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
-          <div
-            className="bg-emerald-500 h-1.5 rounded-full transition-all duration-200"
-            style={{ width: `${ocrPct}%` }}
-          />
+        {/* Indeterminate progress bar */}
+        <div className="w-full bg-zinc-100 rounded-full h-1 overflow-hidden">
+          <div className="h-1 bg-violet-400 rounded-full animate-[pulse_1.5s_ease-in-out_infinite] w-2/3" />
         </div>
-        <p className="text-[10px] text-zinc-400 text-right">{ocrPct}%</p>
       </div>
     )
   }
 
-  // ── ERROR ─────────────────────────────────────────────────────────────────
+  // ── ERROR ────────────────────────────────────────────────────────────────────
   if (phase === PHASES.ERROR) {
     return (
       <div className="border border-red-100 bg-red-50/40 rounded-xl p-4 space-y-3">
         {imgSrc && (
           <img src={imgSrc} alt="scan" className="w-16 h-16 object-cover rounded-lg border border-red-100" />
         )}
-        <p className="text-xs font-semibold text-red-700">OCR failed</p>
+        <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
+          <AlertTriangle size={13} /> Vision AI failed
+        </p>
         <p className="text-xs text-red-600">{errMsg}</p>
         <button onClick={reset} className="text-xs font-semibold text-zinc-600 bg-zinc-100 px-3 py-2 rounded-lg w-full">
           Try again
@@ -188,36 +242,65 @@ export default function ImageOrderScanner({ onTextReady, onError }) {
     )
   }
 
-  // ── PREVIEW (OCR done — editable text) ───────────────────────────────────
+  // ── RESULT (AI matched items preview) ────────────────────────────────────────
   return (
-    <div className="border border-emerald-100 bg-emerald-50/30 rounded-xl p-4 space-y-3">
+    <div className="border border-violet-100 bg-violet-50/20 rounded-xl p-4 space-y-3">
+      {/* Header */}
       <div className="flex items-start gap-3">
         {imgSrc && (
           <img src={imgSrc} alt="scan" className="w-14 h-14 object-cover rounded-lg flex-shrink-0 border border-zinc-100" />
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-zinc-800">Text extracted — review &amp; parse</p>
-          <p className="text-[10px] text-zinc-400 mt-0.5">Edit if OCR made mistakes, then tap Parse</p>
+          <p className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+            <CheckCircle2 size={13} className="text-violet-500" />
+            AI matched {aiItems.length} item{aiItems.length !== 1 ? 's' : ''}
+          </p>
+          <p className="text-[10px] text-zinc-400 mt-0.5">
+            via {aiSource} · {aiUnrec.length > 0 ? `${aiUnrec.length} unmatched` : 'all matched'}
+          </p>
         </div>
-        <button onClick={reset} className="text-zinc-300 hover:text-zinc-500 transition-colors flex-shrink-0">
+        <button onClick={reset} className="text-zinc-300 hover:text-zinc-500 flex-shrink-0">
           <X size={15} />
         </button>
       </div>
 
-      <textarea
-        className="w-full border border-zinc-200 rounded-xl px-3 py-2.5 text-xs text-zinc-800 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
-        rows={5}
-        value={rawText}
-        onChange={e => setRawText(e.target.value)}
-        spellCheck={false}
-      />
+      {/* Matched items */}
+      {aiItems.length > 0 && (
+        <div className="space-y-1.5">
+          {aiItems.map((it, i) => (
+            <div key={i} className="flex items-center justify-between bg-white border border-zinc-100 rounded-lg px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-zinc-800 truncate">{it.productName}</p>
+                <p className="text-[10px] text-zinc-400">{it.qty} {it.unit} · ₹{(it.price * it.qty).toFixed(0)}</p>
+              </div>
+              {!it.inStock && (
+                <span className="text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded ml-2">OOS</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
+      {/* Unrecognised lines */}
+      {aiUnrec.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Not in catalog</p>
+          {aiUnrec.map((u, i) => (
+            <div key={i} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-700">{u.originalLine}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Action buttons */}
       <div className="flex gap-2">
         <button
-          onClick={handleParseClick}
-          className="flex-1 bg-emerald-500 text-white text-xs font-semibold py-2.5 rounded-xl active:scale-95 transition-transform"
+          onClick={handleUseItems}
+          disabled={aiItems.length === 0}
+          className="flex-1 bg-violet-500 text-white text-xs font-semibold py-2.5 rounded-xl active:scale-95 transition-transform disabled:opacity-50"
         >
-          Parse Order →
+          Use These Items →
         </button>
         <button
           onClick={reset}
