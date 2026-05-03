@@ -197,6 +197,26 @@ const useStore = create((set, get) => ({
     ])
     set({ loading: false })
   },
+
+  // ── incoming WhatsApp messages (Path B realtime) ────────────────────────────
+  incomingMessages: [],
+
+  setIncomingMessages: (msgs) => set({ incomingMessages: msgs }),
+
+  addIncomingMessage: (msg) =>
+    set(s => ({ incomingMessages: [msg, ...s.incomingMessages] })),
+
+  dismissIncomingMessage: (id) =>
+    set(s => ({
+      incomingMessages: s.incomingMessages.filter(m => m.id !== id),
+    })),
+
+  convertIncomingMessage: (id) =>
+    set(s => ({
+      incomingMessages: s.incomingMessages.map(m =>
+        m.id === id ? { ...m, status: 'converted' } : m
+      ),
+    })),
 }))
 
 export default useStore

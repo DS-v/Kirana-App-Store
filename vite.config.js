@@ -22,7 +22,14 @@ export default defineConfig({
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
-        ]
+        ],
+        // PWA Share Target: when shopkeeper shares a WhatsApp message to this app,
+        // it opens /orders?text=<message> and the order is auto-parsed.
+        share_target: {
+          action: '/orders',
+          method: 'GET',
+          params: { text: 'text', title: 'title', url: 'url' }
+        }
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
