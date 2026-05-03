@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingBag, ArrowLeft, Phone, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Phone, RotateCcw } from 'lucide-react'
 import supabase from '../lib/supabase'
 import { useToast } from '../components/Toast'
 
-// ── Google SVG mark ───────────────────────────────────────────────────────────
 const GoogleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24">
+  <svg width="18" height="18" viewBox="0 0 24 24">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
@@ -13,11 +12,12 @@ const GoogleIcon = () => (
   </svg>
 )
 
-// ── tiny step indicator ───────────────────────────────────────────────────────
-const steps = ['phone', 'otp', 'setup']
+const Spinner = () => (
+  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+)
 
 export default function Auth({ onAuth }) {
-  const [step, setStep] = useState('phone')   // phone | otp | setup
+  const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [shopName, setShopName] = useState('')
@@ -27,31 +27,22 @@ export default function Auth({ onAuth }) {
   const otpRefs = useRef([])
   const toast = useToast()
 
-  // Countdown timer for resend OTP
   useEffect(() => {
     if (countdown <= 0) return
     const t = setTimeout(() => setCountdown(c => c - 1), 1000)
     return () => clearTimeout(t)
   }, [countdown])
 
-  // Handle Google OAuth redirect callback
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setSession(session)
-        setStep('setup')
-      }
+      if (session) { setSession(session); setStep('setup') }
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session && step !== 'setup') {
-        setSession(session)
-        setStep('setup')
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (s && step !== 'setup') { setSession(s); setStep('setup') }
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  // ── Google OAuth ────────────────────────────────────────────────────────────
   async function signInWithGoogle() {
     setBusy(true)
     const { error } = await supabase.auth.signInWithOAuth({
@@ -61,7 +52,6 @@ export default function Auth({ onAuth }) {
     if (error) { toast(error.message, 'error'); setBusy(false) }
   }
 
-  // ── Phone OTP send ──────────────────────────────────────────────────────────
   async function sendOtp() {
     const digits = phone.replace(/\D/g, '')
     if (digits.length < 10) return toast('Enter a valid 10-digit number', 'error')
@@ -69,39 +59,30 @@ export default function Auth({ onAuth }) {
     const { error } = await supabase.auth.signInWithOtp({ phone: `+91${digits}` })
     setBusy(false)
     if (error) return toast(error.message, 'error')
-    setStep('otp')
-    setCountdown(30)
-    toast('OTP sent to +91 ' + digits, 'success')
+    setStep('otp'); setCountdown(30)
   }
 
-  // ── OTP verify ──────────────────────────────────────────────────────────────
   async function verifyOtp() {
     const code = otp.join('')
     if (code.length < 6) return toast('Enter the 6-digit OTP', 'error')
     setBusy(true)
     const { data, error } = await supabase.auth.verifyOtp({
       phone: `+91${phone.replace(/\D/g, '')}`,
-      token: code,
-      type: 'sms',
+      token: code, type: 'sms',
     })
     setBusy(false)
     if (error) return toast(error.message, 'error')
-    setSession(data.session)
-    setStep('setup')
+    setSession(data.session); setStep('setup')
   }
 
-  // ── Shop setup (first/every login) ─────────────────────────────────────────
   async function finishSetup() {
     if (!shopName.trim()) return toast('Enter your shop name', 'error')
     onAuth(session, shopName.trim())
   }
 
-  // ── OTP digit input handling ────────────────────────────────────────────────
   function handleOtpChange(idx, val) {
     const digit = val.replace(/\D/g, '').slice(-1)
-    const next = [...otp]
-    next[idx] = digit
-    setOtp(next)
+    const next = [...otp]; next[idx] = digit; setOtp(next)
     if (digit && idx < 5) otpRefs.current[idx + 1]?.focus()
   }
   function handleOtpKey(idx, e) {
@@ -109,191 +90,176 @@ export default function Auth({ onAuth }) {
   }
   function handleOtpPaste(e) {
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
-    if (pasted.length === 6) {
-      setOtp(pasted.split(''))
-      otpRefs.current[5]?.focus()
-    }
+    if (pasted.length === 6) { setOtp(pasted.split('')); otpRefs.current[5]?.focus() }
   }
 
-  // ── render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      {/* ── Hero ── */}
-      <div className="bg-gradient-to-br from-green-600 via-green-700 to-emerald-800 flex flex-col items-center justify-center pt-14 pb-10 px-6 text-white text-center flex-shrink-0">
-        <div className="bg-white/15 backdrop-blur rounded-3xl p-5 mb-5 shadow-xl">
-          <ShoppingBag size={44} className="text-white" />
-        </div>
-        <h1 className="text-3xl font-extrabold tracking-tight mb-1">Kirana Smart Orders</h1>
-        <p className="text-green-100 text-base">WhatsApp orders · Catalog · Credit/Udhaar</p>
 
-        <div className="mt-7 grid grid-cols-2 gap-2.5 w-full max-w-xs text-sm">
-          {[['📦','Smart Catalog'],['💬','WhatsApp Orders'],['📋','Udhaar Track'],['📊','Daily Summary']].map(([icon, label]) => (
-            <div key={label} className="bg-white/10 border border-white/20 rounded-2xl py-2.5 px-3 flex items-center gap-2">
-              <span className="text-lg">{icon}</span>
-              <span className="font-medium text-white/90">{label}</span>
-            </div>
-          ))}
+      {/* Top brand strip */}
+      <div className="flex flex-col items-center pt-16 pb-10 px-8 text-center">
+        <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-emerald-100">
+          <span className="text-white text-2xl">🛒</span>
         </div>
+        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Kirana Smart Orders</h1>
+        <p className="text-zinc-400 text-sm mt-1.5">Orders · Catalog · Udhaar · WhatsApp</p>
       </div>
 
-      {/* ── Auth card ── */}
-      <div className="flex-1 bg-white rounded-t-3xl -mt-4 px-6 pt-8 pb-10 shadow-2xl">
+      {/* Card area */}
+      <div className="flex-1 px-6 pb-10">
+        <div className="max-w-sm mx-auto space-y-4">
 
-        {/* ────────────────── STEP: phone ────────────────── */}
-        {step === 'phone' && (
-          <div className="space-y-5 max-w-sm mx-auto">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Welcome</h2>
-              <p className="text-gray-500 text-sm mt-1">Sign in to manage your store</p>
-            </div>
+          {/* ── PHONE STEP ── */}
+          {step === 'phone' && (
+            <>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-6">Sign in to continue</p>
 
-            {/* Google */}
-            <button
-              onClick={signInWithGoogle}
-              disabled={busy}
-              className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 font-semibold py-4 rounded-2xl text-base active:scale-95 transition-all hover:border-gray-300 hover:shadow-sm disabled:opacity-60"
-            >
-              <GoogleIcon />
-              Continue with Google
-            </button>
+              {/* Google */}
+              <button
+                onClick={signInWithGoogle}
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-3 bg-white border border-zinc-200 text-zinc-700
+                           font-semibold py-3.5 rounded-xl text-sm active:scale-[0.97] transition-all
+                           hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-50 shadow-sm"
+              >
+                {busy ? <Spinner /> : <><GoogleIcon />Continue with Google</>}
+              </button>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-gray-200" />
-              <span className="text-xs text-gray-400 font-medium">or use mobile number</span>
-              <div className="flex-1 h-px bg-gray-200" />
-            </div>
+              {/* Divider */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-zinc-100" />
+                <span className="text-xs text-zinc-400">or</span>
+                <div className="flex-1 h-px bg-zinc-100" />
+              </div>
 
-            {/* Phone input */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Mobile Number</label>
-              <div className="flex gap-2">
-                <div className="flex items-center justify-center bg-gray-50 border border-gray-200 rounded-xl px-3 text-gray-600 font-semibold text-sm w-16 flex-shrink-0">
-                  🇮🇳 +91
+              {/* Phone */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-500">Mobile Number</label>
+                <div className="flex gap-2">
+                  <div className="flex items-center justify-center bg-zinc-50 border border-zinc-200 rounded-xl px-3 text-zinc-500 text-sm font-semibold w-20 flex-shrink-0">
+                    🇮🇳 +91
+                  </div>
+                  <input
+                    className="input-field flex-1 text-lg font-medium tracking-widest"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="98765 43210"
+                    maxLength={10}
+                    value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
+                    onKeyDown={e => e.key === 'Enter' && sendOtp()}
+                  />
                 </div>
+              </div>
+
+              <button
+                onClick={sendOtp}
+                disabled={busy || phone.replace(/\D/g, '').length < 10}
+                className="btn-primary flex items-center justify-center gap-2 disabled:opacity-40"
+              >
+                {busy ? <Spinner /> : <><Phone size={16} />Send OTP</>}
+              </button>
+
+              <p className="text-center text-xs text-zinc-400 pt-2">
+                By continuing you agree to our Terms of Service
+              </p>
+            </>
+          )}
+
+          {/* ── OTP STEP ── */}
+          {step === 'otp' && (
+            <>
+              <button
+                onClick={() => setStep('phone')}
+                className="flex items-center gap-2 text-zinc-500 text-sm font-medium mb-2 -ml-1"
+              >
+                <ArrowLeft size={15} /> Back
+              </button>
+
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-zinc-900">Enter OTP</h2>
+                <p className="text-zinc-400 text-sm mt-1">
+                  Sent to <span className="font-semibold text-zinc-600">+91 {phone}</span>
+                </p>
+              </div>
+
+              {/* 6-box OTP */}
+              <div className="flex gap-2 justify-center" onPaste={handleOtpPaste}>
+                {otp.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    ref={el => otpRefs.current[idx] = el}
+                    className="w-11 h-13 text-center text-xl font-bold border-2 rounded-xl
+                               focus:outline-none transition-all border-zinc-200 bg-zinc-50
+                               focus:border-emerald-400 focus:bg-white"
+                    style={{ height: '52px' }}
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handleOtpChange(idx, e.target.value)}
+                    onKeyDown={e => handleOtpKey(idx, e)}
+                    autoFocus={idx === 0}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={verifyOtp}
+                disabled={busy || otp.join('').length < 6}
+                className="btn-primary flex items-center justify-center gap-2 disabled:opacity-40 mt-2"
+              >
+                {busy ? <Spinner /> : 'Verify & Continue →'}
+              </button>
+
+              <div className="text-center pt-1">
+                {countdown > 0 ? (
+                  <p className="text-sm text-zinc-400">Resend in <span className="font-semibold text-zinc-600">{countdown}s</span></p>
+                ) : (
+                  <button
+                    onClick={() => { sendOtp(); setOtp(['','','','','','']) }}
+                    className="flex items-center gap-1.5 text-sm text-emerald-600 font-semibold mx-auto"
+                  >
+                    <RotateCcw size={13} /> Resend OTP
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── SETUP STEP ── */}
+          {step === 'setup' && (
+            <>
+              <div className="mb-6">
+                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4">
+                  <span className="text-2xl">🎉</span>
+                </div>
+                <h2 className="text-xl font-bold text-zinc-900">You're in!</h2>
+                <p className="text-zinc-400 text-sm mt-1">What's your shop called?</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-500">Shop Name</label>
                 <input
-                  className="input-field flex-1 text-lg font-medium tracking-wide"
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="98765 43210"
-                  maxLength={10}
-                  value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                  onKeyDown={e => e.key === 'Enter' && sendOtp()}
+                  className="input-field text-lg font-medium"
+                  placeholder="e.g. Sharma General Store"
+                  value={shopName}
+                  autoFocus
+                  onChange={e => setShopName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && finishSetup()}
                 />
               </div>
-            </div>
 
-            <button
-              onClick={sendOtp}
-              disabled={busy || phone.replace(/\D/g, '').length < 10}
-              className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {busy
-                ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <><Phone size={18} /> Send OTP</>
-              }
-            </button>
-
-            <p className="text-center text-xs text-gray-400">
-              By continuing you agree to our Terms of Service
-            </p>
-          </div>
-        )}
-
-        {/* ────────────────── STEP: otp ────────────────── */}
-        {step === 'otp' && (
-          <div className="space-y-6 max-w-sm mx-auto">
-            <button onClick={() => setStep('phone')} className="flex items-center gap-2 text-gray-500 text-sm font-medium">
-              <ArrowLeft size={16} /> Back
-            </button>
-
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Enter OTP</h2>
-              <p className="text-gray-500 text-sm mt-1">
-                Sent to <span className="font-semibold text-gray-700">+91 {phone}</span>
-              </p>
-            </div>
-
-            {/* 6-box OTP */}
-            <div className="flex gap-2.5 justify-center" onPaste={handleOtpPaste}>
-              {otp.map((digit, idx) => (
-                <input
-                  key={idx}
-                  ref={el => otpRefs.current[idx] = el}
-                  className="w-11 h-14 text-center text-2xl font-bold border-2 rounded-2xl focus:outline-none transition-colors
-                    border-gray-200 focus:border-green-500 bg-gray-50 focus:bg-white"
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={e => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={e => handleOtpKey(idx, e)}
-                  autoFocus={idx === 0}
-                />
-              ))}
-            </div>
-
-            <button
-              onClick={verifyOtp}
-              disabled={busy || otp.join('').length < 6}
-              className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {busy
-                ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : 'Verify OTP →'
-              }
-            </button>
-
-            {/* Resend */}
-            <div className="text-center">
-              {countdown > 0 ? (
-                <p className="text-sm text-gray-400">Resend in <span className="font-semibold text-gray-600">{countdown}s</span></p>
-              ) : (
-                <button
-                  onClick={() => { sendOtp(); setOtp(['','','','','','']) }}
-                  className="flex items-center gap-1.5 text-sm text-green-600 font-semibold mx-auto"
-                >
-                  <RefreshCw size={14} /> Resend OTP
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ────────────────── STEP: setup ────────────────── */}
-        {step === 'setup' && (
-          <div className="space-y-6 max-w-sm mx-auto">
-            <div>
-              <span className="text-4xl">🎉</span>
-              <h2 className="text-2xl font-bold text-gray-900 mt-3">You're in!</h2>
-              <p className="text-gray-500 text-sm mt-1">What should we call your shop?</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Shop Name</label>
-              <input
-                className="input-field text-lg"
-                placeholder="e.g. Sharma General Store"
-                value={shopName}
-                autoFocus
-                onChange={e => setShopName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && finishSetup()}
-              />
-            </div>
-
-            <button onClick={finishSetup} disabled={busy || !shopName.trim()} className="btn-primary disabled:opacity-50">
-              {busy
-                ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                : 'Start Managing Orders →'
-              }
-            </button>
-
-            <p className="text-center text-xs text-gray-400">
-              You can change this later in settings
-            </p>
-          </div>
-        )}
+              <button
+                onClick={finishSetup}
+                disabled={busy || !shopName.trim()}
+                className="btn-primary disabled:opacity-40 flex items-center justify-center"
+              >
+                {busy ? <Spinner /> : 'Start Managing Orders →'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
