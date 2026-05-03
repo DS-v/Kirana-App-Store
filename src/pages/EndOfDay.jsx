@@ -1,41 +1,45 @@
 import { useState } from 'react'
-import { Sun, ExternalLink, Download, Share2, TrendingUp, ShoppingBag, AlertTriangle, Users } from 'lucide-react'
+import { Sun, Share2, ShoppingBag, AlertTriangle, Users, Package, TrendingUp, Clock, XCircle } from 'lucide-react'
 import useStore from '../store/useStore'
+import WAButton from '../components/WAButton'
 import { sendEndOfDaySummary } from '../utils/whatsapp'
 import { format } from 'date-fns'
 
+const STATUS_COLOR = {
+  delivered: 'status-delivered',
+  confirmed: 'status-confirmed',
+  packed:    'status-packed',
+  credit:    'status-credit',
+  cancelled: 'status-cancelled',
+  pending:   'status-pending',
+}
+
 export default function EndOfDay() {
-  const orders = useStore(s => s.orders)
-  const products = useStore(s => s.products)
+  const orders    = useStore(s => s.orders)
+  const products  = useStore(s => s.products)
   const customers = useStore(s => s.customers)
-  const shopName = useStore(s => s.shopName)
+  const shopName  = useStore(s => s.shopName)
   const ownerPhone = useStore(s => s.ownerPhone)
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
 
-  const dayOrders = orders.filter(o => {
-    const d = new Date(o.createdAt)
-    return format(d, 'yyyy-MM-dd') === selectedDate
-  })
+  const dayOrders = orders.filter(o => format(new Date(o.createdAt), 'yyyy-MM-dd') === selectedDate)
 
-  const totalOrders = dayOrders.length
-  const fulfilled = dayOrders.filter(o => ['confirmed', 'packed', 'delivered'].includes(o.status)).length
-  const missed = dayOrders.filter(o => o.status === 'cancelled').length
-  const pending = dayOrders.filter(o => o.status === 'pending').length
+  const totalOrders  = dayOrders.length
+  const fulfilled    = dayOrders.filter(o => ['confirmed', 'packed', 'delivered'].includes(o.status)).length
+  const missed       = dayOrders.filter(o => o.status === 'cancelled').length
+  const pending      = dayOrders.filter(o => o.status === 'pending').length
   const creditOrders = dayOrders.filter(o => o.status === 'credit')
-  const creditTotal = creditOrders.reduce((s, o) => s + (o.total || 0), 0)
-  const collected = dayOrders
+  const creditTotal  = creditOrders.reduce((s, o) => s + (o.total || 0), 0)
+  const collected    = dayOrders
     .filter(o => ['confirmed', 'packed', 'delivered'].includes(o.status))
     .reduce((s, o) => s + (o.total || 0), 0)
-  const oosItems = products.filter(p => !p.inStock)
-  const totalDue = customers.reduce((s, c) => s + (c.udhaar || 0), 0)
+  const oosItems  = products.filter(p => !p.inStock)
+  const totalDue  = customers.reduce((s, c) => s + (c.udhaar || 0), 0)
+  const debtors   = customers.filter(c => c.udhaar > 0)
 
   const summary = {
     date: format(new Date(selectedDate), 'd MMM yyyy'),
-    totalOrders,
-    fulfilled,
-    missed,
-    collected,
-    credit: creditTotal,
+    totalOrders, fulfilled, missed, collected, credit: creditTotal,
     stockAlerts: oosItems.map(p => p.name),
   }
 
@@ -56,21 +60,24 @@ ${oosItems.length ? `\n⚠️ Out of Stock (${oosItems.length}): ${oosItems.map(
 _Powered by Kirana Smart Orders_`
 
   return (
-    <div className="px-4 py-5 space-y-5">
+    <div className="px-4 pt-6 pb-28 space-y-5 max-w-lg mx-auto">
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">End of Day</h1>
-          <p className="text-sm text-gray-500">{shopName}</p>
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+            {format(new Date(selectedDate), 'EEEE, d MMM')}
+          </p>
+          <h1 className="text-2xl font-bold text-zinc-900 mt-0.5 tracking-tight">End of Day</h1>
         </div>
-        <div className="bg-amber-100 rounded-2xl p-2.5">
-          <Sun size={24} className="text-amber-500" />
+        <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+          <Sun size={20} className="text-amber-500" />
         </div>
       </div>
 
-      {/* Date selector */}
-      <div>
-        <label className="text-xs font-semibold text-gray-600 mb-1 block">Report Date</label>
+      {/* Date picker */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-zinc-500">Report Date</label>
         <input
           type="date"
           className="input-field"
@@ -82,51 +89,51 @@ _Powered by Kirana Smart Orders_`
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3">
-        <SummaryCard label="Total Orders" value={totalOrders} sub="today" icon="📦" color="bg-blue-50" />
-        <SummaryCard label="Fulfilled" value={fulfilled} sub="orders" icon="✅" color="bg-green-50" />
-        <SummaryCard label="Collected" value={`₹${collected}`} sub="cash" icon="💵" color="bg-emerald-50" />
-        <SummaryCard label="Credit Issued" value={`₹${creditTotal}`} sub={`${creditOrders.length} orders`} icon="📋" color="bg-orange-50" />
-        <SummaryCard label="Pending" value={pending} sub="orders" icon="⏳" color="bg-yellow-50" />
-        <SummaryCard label="Cancelled" value={missed} sub="orders" icon="❌" color="bg-red-50" />
+        <StatCard icon={<ShoppingBag size={18} />}  label="Total Orders"   value={totalOrders}       sub="for the day"   color="emerald" />
+        <StatCard icon={<TrendingUp size={18} />}    label="Collected"      value={`₹${collected}`}   sub="cash received" color="sky" />
+        <StatCard icon={<Package size={18} />}       label="Fulfilled"      value={fulfilled}          sub="orders"        color="violet" />
+        <StatCard icon={<Users size={18} />}         label="Credit Issued"  value={`₹${creditTotal}`} sub={`${creditOrders.length} orders`} color="orange" />
+        <StatCard icon={<Clock size={18} />}         label="Pending"        value={pending}            sub="orders"        color="amber" />
+        <StatCard icon={<XCircle size={18} />}       label="Cancelled"      value={missed}             sub="orders"        color="zinc" />
       </div>
 
-      {/* Udhaar summary */}
-      <div className="card bg-orange-50 border-orange-200">
-        <div className="flex items-center gap-2 mb-3">
-          <Users size={18} className="text-orange-500" />
-          <p className="font-bold text-orange-800">Udhaar Overview</p>
-        </div>
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-sm text-orange-700">Total customers with dues</span>
-            <span className="font-bold text-orange-800">{customers.filter(c => c.udhaar > 0).length}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-orange-700">Total amount due</span>
-            <span className="font-bold text-orange-800">₹{totalDue}</span>
-          </div>
-          {customers.filter(c => c.udhaar > 0).slice(0, 3).map(c => (
-            <div key={c.id} className="flex justify-between text-sm">
-              <span className="text-orange-600">{c.name}</span>
-              <span className="font-semibold text-orange-700">₹{c.udhaar}</span>
+      {/* Udhaar overview */}
+      {debtors.length > 0 && (
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+              <Users size={14} className="text-orange-500" />
             </div>
-          ))}
-          {customers.filter(c => c.udhaar > 0).length > 3 && (
-            <p className="text-xs text-orange-500">+{customers.filter(c => c.udhaar > 0).length - 3} more</p>
-          )}
+            <p className="font-bold text-zinc-900 text-sm">Udhaar Overview</p>
+            <span className="ml-auto font-bold text-orange-500">₹{totalDue}</span>
+          </div>
+          <div className="divide-y divide-zinc-50">
+            {debtors.slice(0, 4).map(c => (
+              <div key={c.id} className="flex justify-between text-sm py-2">
+                <span className="text-zinc-600">{c.name}</span>
+                <span className="font-semibold text-zinc-900">₹{c.udhaar}</span>
+              </div>
+            ))}
+            {debtors.length > 4 && (
+              <p className="text-xs text-zinc-400 pt-2">+{debtors.length - 4} more customers</p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Out of stock */}
       {oosItems.length > 0 && (
-        <div className="card bg-red-50 border-red-200">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle size={18} className="text-red-500" />
-            <p className="font-bold text-red-800">Out of Stock ({oosItems.length})</p>
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle size={14} className="text-red-500" />
+            </div>
+            <p className="font-bold text-zinc-900 text-sm">Out of Stock</p>
+            <span className="ml-auto text-xs font-semibold text-red-500">{oosItems.length} items</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {oosItems.map(p => (
-              <span key={p.id} className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">{p.name}</span>
+              <span key={p.id} className="px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium">{p.name}</span>
             ))}
           </div>
         </div>
@@ -134,23 +141,21 @@ _Powered by Kirana Smart Orders_`
 
       {/* Order breakdown */}
       {dayOrders.length > 0 && (
-        <div className="card">
-          <p className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-            <ShoppingBag size={18} className="text-green-600" /> Order Breakdown
-          </p>
-          <div className="space-y-2">
+        <div className="card p-0 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-50">
+            <ShoppingBag size={15} className="text-zinc-400" />
+            <p className="font-bold text-zinc-900 text-sm">Order Breakdown</p>
+          </div>
+          <div className="divide-y divide-zinc-50">
             {dayOrders.map(o => (
-              <div key={o.id} className="flex justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
-                <div>
-                  <span className="font-medium text-gray-800">{o.customerName}</span>
-                  <span className="text-gray-400 ml-2">{o.items?.length} items</span>
+              <div key={o.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-zinc-800 truncate">{o.customerName}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">{o.items?.length} items</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">₹{o.total}</span>
-                  <span className={`badge text-xs ${o.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                    o.status === 'credit' ? 'bg-orange-100 text-orange-700' :
-                    o.status === 'cancelled' ? 'bg-red-100 text-red-600' :
-                    'bg-blue-100 text-blue-700'}`}>{o.status}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-sm font-bold text-zinc-900">₹{o.total}</span>
+                  <span className={STATUS_COLOR[o.status] || 'badge bg-zinc-100 text-zinc-500'}>{o.status}</span>
                 </div>
               </div>
             ))}
@@ -158,48 +163,50 @@ _Powered by Kirana Smart Orders_`
         </div>
       )}
 
-      {/* Summary text preview */}
-      <div className="card bg-gray-50">
-        <p className="text-xs font-semibold text-gray-500 mb-2">Summary Preview</p>
-        <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">{summaryText}</pre>
+      {/* Summary preview */}
+      <div className="card space-y-2">
+        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Summary Preview</p>
+        <pre className="text-xs text-zinc-600 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-xl px-3 py-3">{summaryText}</pre>
       </div>
 
-      {/* Action buttons */}
-      <div className="space-y-3">
-        <a
-          href={waLink}
-          target="_blank"
-          rel="noreferrer"
-          className="btn-primary flex items-center justify-center gap-2"
-        >
-          <ExternalLink size={18} /> Send Summary via WhatsApp
-        </a>
+      {/* Actions */}
+      <div className="space-y-2.5">
+        <WAButton href={waLink} label="Send Summary via WhatsApp" size="md" block />
         <button
           onClick={() => {
             navigator.clipboard?.writeText(summaryText)
-              .then(() => alert('Summary copied to clipboard!'))
+              .then(() => alert('Copied to clipboard!'))
               .catch(() => alert('Copy: ' + summaryText))
           }}
           className="btn-secondary flex items-center justify-center gap-2"
         >
-          <Share2 size={18} /> Copy Summary
+          <Share2 size={17} /> Copy Summary
         </button>
       </div>
 
-      <div className="h-2" />
     </div>
   )
 }
 
-function SummaryCard({ label, value, sub, icon, color }) {
+function StatCard({ icon, label, value, sub, color }) {
+  const colors = {
+    emerald: 'text-emerald-500 bg-emerald-50',
+    sky:     'text-sky-500 bg-sky-50',
+    violet:  'text-violet-500 bg-violet-50',
+    orange:  'text-orange-500 bg-orange-50',
+    amber:   'text-amber-500 bg-amber-50',
+    zinc:    'text-zinc-400 bg-zinc-100',
+  }
+  const iconCls = colors[color] || colors.zinc
+
   return (
-    <div className={`card ${color} text-left`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-xl">{icon}</span>
-        <span className="text-xs text-gray-500 font-medium">{label}</span>
+    <div className="card text-left">
+      <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${iconCls}`}>
+        {icon}
       </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500">{sub}</p>
+      <p className="text-xl font-bold text-zinc-900 tracking-tight">{value}</p>
+      <p className="text-[11px] font-semibold text-zinc-400 mt-0.5 uppercase tracking-wide">{label}</p>
+      <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>
     </div>
   )
 }

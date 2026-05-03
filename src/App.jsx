@@ -23,10 +23,39 @@ function Spinner() {
 }
 
 function AppShell() {
-  const hydrate = useStore(s => s.hydrate)
-  const loading = useStore(s => s.loading)
+  const hydrate              = useStore(s => s.hydrate)
+  const loading              = useStore(s => s.loading)
+  const shopId               = useStore(s => s.shopId)
+  const setIncomingMessages  = useStore(s => s.setIncomingMessages)
+  const addIncomingMessage   = useStore(s => s.addIncomingMessage)
 
-  useEffect(() => { hydrate() }, [])
+  useEffect(() => {
+    hydrate()
+
+    // Fetch any pending incoming messages that arrived while the app was closed
+    if (shopId) {
+      supabase
+        .from('incoming_whatsapp')
+        .select('*')
+        .eq('shop_id', shopId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(20)
+        .then(({ data }) => { if (data?.length) setIncomingMessages(data) })
+    }
+
+    // Supabase Realtime — new incoming messages arrive here in real-time
+    const channel = supabase
+      .channel('incoming_whatsapp_feed')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'incoming_whatsapp' },
+        payload => addIncomingMessage(payload.new)
+      )
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }, [])
 
   if (loading) return <Spinner />
 
