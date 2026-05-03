@@ -1,21 +1,24 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Package, ShoppingBag, Users, Sun } from 'lucide-react'
+import { LayoutDashboard, Package, ShoppingBag, Users } from 'lucide-react'
 import useStore from '../store/useStore'
 
 const tabs = [
   { to: '/',          icon: LayoutDashboard, label: 'Home' },
   { to: '/catalog',   icon: Package,         label: 'Catalog' },
   { to: '/orders',    icon: ShoppingBag,     label: 'Orders' },
-  { to: '/customers', icon: Users,           label: 'Customers' },
-  { to: '/day',       icon: Sun,             label: 'Day End' },
+  { to: '/customers', icon: Users,           label: 'People' },
 ]
 
 export default function BottomNav() {
   const incomingCount = useStore(s => s.incomingMessages.filter(m => m.status === 'pending').length)
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-md border-t border-zinc-100">
-      <div className="flex max-w-lg mx-auto px-2">
+    /* Floating pill — sits 12px off the bottom edge */
+    <div className="fixed bottom-3 left-3 right-3 z-40 flex justify-center pointer-events-none">
+      <nav
+        className="pointer-events-auto w-full max-w-sm bg-white/96 backdrop-blur-2xl rounded-2xl flex items-center px-1 py-1.5"
+        style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
+      >
         {tabs.map(({ to, icon: Icon, label }) => {
           const badge = to === '/orders' && incomingCount > 0 ? incomingCount : 0
           return (
@@ -23,31 +26,41 @@ export default function BottomNav() {
               key={to}
               to={to}
               end={to === '/'}
-              className={({ isActive }) =>
-                `flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-colors relative ${
-                  isActive ? 'text-emerald-600' : 'text-zinc-400'
-                }`
-              }
+              className="flex-1"
             >
               {({ isActive }) => (
-                <>
-                  <div className={`relative p-1.5 rounded-xl transition-colors ${isActive ? 'bg-emerald-50' : ''}`}>
-                    <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
+                <div
+                  className={`relative flex flex-col items-center gap-0.5 py-2 mx-0.5 rounded-xl transition-all duration-200 ${
+                    isActive
+                      ? 'bg-emerald-500'
+                      : 'hover:bg-zinc-50 active:bg-zinc-100'
+                  }`}
+                >
+                  {/* Icon */}
+                  <div className="relative">
+                    <Icon
+                      size={20}
+                      strokeWidth={isActive ? 2.2 : 1.8}
+                      className={isActive ? 'text-white' : 'text-zinc-400'}
+                    />
+                    {/* Badge */}
                     {badge > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-1 leading-none">
                         {badge > 9 ? '9+' : badge}
                       </span>
                     )}
                   </div>
-                  <span className={`text-[10px] font-semibold tracking-wide ${isActive ? 'text-emerald-600' : 'text-zinc-400'}`}>
+
+                  {/* Label */}
+                  <span className={`text-[10px] font-bold tracking-wide leading-none ${isActive ? 'text-white' : 'text-zinc-400'}`}>
                     {label}
                   </span>
-                </>
+                </div>
               )}
             </NavLink>
           )
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   )
 }

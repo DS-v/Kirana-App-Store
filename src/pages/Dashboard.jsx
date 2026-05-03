@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ShoppingBag, Package, Users, TrendingUp, AlertTriangle, LogOut, ChevronRight } from 'lucide-react'
+import { ShoppingBag, Package, Users, TrendingUp, AlertTriangle, LogOut, ChevronRight, Zap } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WASetup from '../components/WASetup'
@@ -22,169 +22,220 @@ export default function Dashboard() {
   const logout    = useStore(s => s.logout)
   const nav = useNavigate()
 
-  const today        = new Date().toDateString()
-  const todayOrders  = orders.filter(o => new Date(o.createdAt).toDateString() === today)
-  const pending      = todayOrders.filter(o => o.status === 'pending' || o.status === 'confirmed')
-  const revenue      = todayOrders
+  const today       = new Date().toDateString()
+  const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString() === today)
+  const pending     = todayOrders.filter(o => o.status === 'pending' || o.status === 'confirmed')
+  const revenue     = todayOrders
     .filter(o => o.status !== 'cancelled' && o.status !== 'credit')
     .reduce((s, o) => s + (o.total || 0), 0)
-  const creditDue    = customers.reduce((s, c) => s + (c.udhaar || 0), 0)
-  const oosCount     = products.filter(p => !p.inStock).length
-  const creditCount  = customers.filter(c => c.udhaar > 0).length
+  const creditDue   = customers.reduce((s, c) => s + (c.udhaar || 0), 0)
+  const oosCount    = products.filter(p => !p.inStock).length
+  const creditCount = customers.filter(c => c.udhaar > 0).length
 
   return (
-    <div className="px-4 pt-6 pb-28 space-y-6 max-w-lg mx-auto">
+    <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
-            {format(new Date(), 'EEEE, d MMM')}
-          </p>
-          <h1 className="text-2xl font-bold text-zinc-900 mt-0.5 tracking-tight">{shopName}</h1>
-        </div>
-        <button
-          onClick={logout}
-          className="flex items-center gap-1.5 text-xs text-zinc-400 font-semibold bg-zinc-100 px-3 py-2 rounded-xl active:scale-95 transition-transform hover:bg-zinc-200"
-        >
-          <LogOut size={13} /> Sign out
-        </button>
-      </div>
+      {/* ── Hero header ────────────────────────────────────────────────── */}
+      <div
+        className="relative overflow-hidden px-4 pt-12 pb-6"
+        style={{ background: 'linear-gradient(135deg, #047857 0%, #059669 55%, #10b981 100%)' }}
+      >
+        {/* Decorative blobs */}
+        <div className="absolute -top-10 -right-10 w-52 h-52 rounded-full opacity-[0.12] bg-white" />
+        <div className="absolute bottom-4 -left-8 w-36 h-36 rounded-full opacity-[0.08] bg-white" />
+        <div className="absolute top-1/2 right-8 w-20 h-20 rounded-full opacity-[0.07] bg-white" />
 
-      {/* ── Stats grid ── */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          icon={<ShoppingBag size={18} />}
-          label="Today's Orders"
-          value={todayOrders.length}
-          sub={pending.length > 0 ? `${pending.length} pending` : 'all clear'}
-          color="emerald"
-          onClick={() => nav('/orders')}
-        />
-        <StatCard
-          icon={<TrendingUp size={18} />}
-          label="Revenue"
-          value={`₹${revenue}`}
-          sub="collected today"
-          color="sky"
-        />
-        <StatCard
-          icon={<Users size={18} />}
-          label="Udhaar Due"
-          value={`₹${creditDue}`}
-          sub={creditCount > 0 ? `${creditCount} customers` : 'nobody owes'}
-          color="orange"
-          onClick={() => nav('/customers')}
-        />
-        <StatCard
-          icon={<Package size={18} />}
-          label="Out of Stock"
-          value={oosCount}
-          sub={oosCount === 0 ? 'fully stocked' : 'items low'}
-          color={oosCount > 0 ? 'red' : 'zinc'}
-          onClick={() => nav('/catalog')}
-        />
-      </div>
-
-      {/* ── Quick Actions ── */}
-      <div className="space-y-2">
-        <p className="section-label">Quick Actions</p>
-        <div className="card divide-y divide-zinc-50 p-0 overflow-hidden">
-          {[
-            { emoji: '💬', label: 'New WhatsApp Order', sub: 'Paste a customer message', path: '/orders?new=1' },
-            { emoji: '📦', label: 'Add to Catalog', sub: 'Voice, photo or type', path: '/catalog?add=1' },
-            { emoji: '📋', label: 'Record Udhaar', sub: "Track a customer's credit", path: '/customers?add=1' },
-          ].map(({ emoji, label, sub, path }) => (
+        <div className="relative max-w-lg mx-auto">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-emerald-200 text-xs font-bold uppercase tracking-[0.12em]">
+                {format(new Date(), 'EEEE, d MMM yyyy')}
+              </p>
+              <h1 className="text-white text-2xl font-extrabold mt-1 tracking-tight leading-tight">
+                {shopName || 'My Store'}
+              </h1>
+              <p className="text-emerald-200/80 text-xs mt-1 font-medium">
+                {todayOrders.length === 0
+                  ? 'No orders today yet'
+                  : `${todayOrders.length} order${todayOrders.length !== 1 ? 's' : ''} today`}
+              </p>
+            </div>
             <button
-              key={path}
-              onClick={() => nav(path)}
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-zinc-50 transition-colors"
+              onClick={logout}
+              className="flex items-center gap-1.5 text-xs font-semibold text-emerald-100 bg-white/15 hover:bg-white/25 active:bg-white/10 px-3 py-2 rounded-xl transition-colors backdrop-blur-sm"
             >
-              <span className="text-xl w-8 text-center flex-shrink-0">{emoji}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-zinc-800">{label}</p>
-                <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>
-              </div>
-              <ChevronRight size={15} className="text-zinc-300 flex-shrink-0" />
+              <LogOut size={12} /> Sign out
             </button>
-          ))}
+          </div>
         </div>
       </div>
 
-      {/* ── WhatsApp Auto-Ingestion Setup ── */}
-      <div className="space-y-2">
-        <p className="section-label">WhatsApp Integration</p>
-        <WASetup />
+      {/* ── Stat cards ─────────────────────────────────────────────────── */}
+      <div className="px-4 pt-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard
+            icon={<ShoppingBag size={17} />}
+            label="Today's Orders"
+            value={todayOrders.length}
+            sub={pending.length > 0 ? `${pending.length} pending` : '✓ all clear'}
+            gradient="from-emerald-500 to-emerald-600"
+            iconBg="bg-emerald-500/10 text-emerald-600"
+            onClick={() => nav('/orders')}
+          />
+          <StatCard
+            icon={<TrendingUp size={17} />}
+            label="Revenue"
+            value={`₹${revenue.toLocaleString('en-IN')}`}
+            sub="collected today"
+            gradient="from-sky-500 to-sky-600"
+            iconBg="bg-sky-500/10 text-sky-600"
+          />
+          <StatCard
+            icon={<Users size={17} />}
+            label="Udhaar Due"
+            value={`₹${creditDue.toLocaleString('en-IN')}`}
+            sub={creditCount > 0 ? `${creditCount} customer${creditCount !== 1 ? 's' : ''}` : 'nobody owes'}
+            gradient="from-orange-500 to-orange-600"
+            iconBg="bg-orange-500/10 text-orange-600"
+            onClick={() => nav('/customers')}
+          />
+          <StatCard
+            icon={<Package size={17} />}
+            label="Out of Stock"
+            value={oosCount}
+            sub={oosCount === 0 ? '✓ fully stocked' : `${oosCount} items low`}
+            gradient={oosCount > 0 ? 'from-red-500 to-rose-500' : 'from-zinc-400 to-zinc-500'}
+            iconBg={oosCount > 0 ? 'bg-red-500/10 text-red-600' : 'bg-zinc-500/10 text-zinc-500'}
+            onClick={() => nav('/catalog')}
+            alert={oosCount > 0}
+          />
+        </div>
       </div>
 
-      {/* ── OOS Alert ── */}
-      {oosCount > 0 && (
-        <button
-          onClick={() => nav('/catalog')}
-          className="w-full flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3.5 text-left active:scale-[0.98] transition-transform"
-        >
-          <AlertTriangle size={17} className="text-amber-500 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-amber-800">{oosCount} items out of stock</p>
-            <p className="text-xs text-amber-500 mt-0.5">Tap to update catalog</p>
-          </div>
-          <ChevronRight size={15} className="text-amber-300" />
-        </button>
-      )}
+      {/* ── Rest of content ─────────────────────────────────────────────── */}
+      <div className="px-4 mt-5 max-w-lg mx-auto space-y-5">
 
-      {/* ── Recent Orders ── */}
-      {todayOrders.length > 0 && (
+        {/* OOS Alert banner */}
+        {oosCount > 0 && (
+          <button
+            onClick={() => nav('/catalog')}
+            className="w-full flex items-center gap-3 bg-amber-50 border border-amber-200/60 rounded-2xl px-4 py-3.5 text-left active:scale-[0.98] transition-transform"
+            style={{ boxShadow: '0 2px 8px rgba(245,158,11,0.12)' }}
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle size={16} className="text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-900">{oosCount} items out of stock</p>
+              <p className="text-xs text-amber-600 mt-0.5">Tap to mark as restocked</p>
+            </div>
+            <ChevronRight size={15} className="text-amber-400" />
+          </button>
+        )}
+
+        {/* Quick Actions */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="section-label">Today's Orders</p>
-            <button onClick={() => nav('/orders')} className="text-xs text-emerald-600 font-semibold">See all</button>
-          </div>
-          <div className="card p-0 overflow-hidden divide-y divide-zinc-50">
-            {todayOrders.slice(0, 5).map(order => (
+          <p className="section-label px-1">Quick Actions</p>
+          <div className="card p-0 overflow-hidden divide-y divide-zinc-50/80">
+            {[
+              { emoji: '💬', label: 'New Order',     sub: 'Voice, image or paste message',  path: '/orders?new=1',   color: 'bg-emerald-50' },
+              { emoji: '📦', label: 'Add Product',   sub: 'Voice, photo or type',            path: '/catalog?add=1',  color: 'bg-sky-50' },
+              { emoji: '📋', label: 'Record Udhaar', sub: "Track a customer's credit",        path: '/customers?add=1',color: 'bg-orange-50' },
+            ].map(({ emoji, label, sub, path, color }) => (
               <button
-                key={order.id}
-                onClick={() => nav('/orders')}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-zinc-50 transition-colors"
+                key={path}
+                onClick={() => nav(path)}
+                className="w-full flex items-center gap-3.5 px-4 py-4 text-left active:bg-zinc-50 transition-colors"
               >
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[order.status] || 'bg-zinc-300'}`} />
+                <span className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center text-xl flex-shrink-0`}>
+                  {emoji}
+                </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-800 truncate">{order.customerName || 'Customer'}</p>
-                  <p className="text-xs text-zinc-400">{order.items?.length || 0} items · <span className="capitalize">{order.status}</span></p>
+                  <p className="text-sm font-bold text-zinc-900">{label}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>
                 </div>
-                <p className="text-sm font-bold text-zinc-900">₹{order.total || 0}</p>
+                <ChevronRight size={14} className="text-zinc-300 flex-shrink-0" />
               </button>
             ))}
           </div>
         </div>
-      )}
 
-      <div className="h-4" />
+        {/* WhatsApp Setup */}
+        <div className="space-y-2">
+          <p className="section-label px-1">WhatsApp Integration</p>
+          <WASetup />
+        </div>
+
+        {/* Recent Orders */}
+        {todayOrders.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <p className="section-label">Today's Orders</p>
+              <button
+                onClick={() => nav('/orders')}
+                className="text-xs text-emerald-600 font-bold flex items-center gap-1 hover:text-emerald-700 transition-colors"
+              >
+                See all <ChevronRight size={12} />
+              </button>
+            </div>
+            <div className="card p-0 overflow-hidden divide-y divide-zinc-50/80">
+              {todayOrders.slice(0, 5).map(order => (
+                <button
+                  key={order.id}
+                  onClick={() => nav('/orders')}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-zinc-50 transition-colors"
+                >
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[order.status] || 'bg-zinc-300'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-zinc-800 truncate">{order.customerName || 'Customer'}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {order.items?.length || 0} items · <span className="capitalize">{order.status}</span>
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-zinc-900 tabular-nums">₹{(order.total || 0).toLocaleString('en-IN')}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {todayOrders.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-icon">
+              <Zap size={28} className="text-zinc-300" />
+            </div>
+            <p className="text-sm font-semibold text-zinc-400">No orders yet today</p>
+            <p className="text-xs text-zinc-300 max-w-[180px]">Tap New Order to get started</p>
+          </div>
+        )}
+
+      </div>
     </div>
   )
 }
 
-function StatCard({ icon, label, value, sub, color, onClick }) {
-  const colors = {
-    emerald: 'text-emerald-500 bg-emerald-50',
-    sky:     'text-sky-500 bg-sky-50',
-    orange:  'text-orange-500 bg-orange-50',
-    red:     'text-red-500 bg-red-50',
-    zinc:    'text-zinc-400 bg-zinc-100',
-  }
-  const iconCls = colors[color] || colors.zinc
+// ── Stat Card ──────────────────────────────────────────────────────────────────
 
+function StatCard({ icon, label, value, sub, iconBg, onClick, alert }) {
   return (
     <button
       onClick={onClick}
       disabled={!onClick}
-      className="card text-left w-full active:scale-[0.97] transition-transform disabled:cursor-default"
+      className="card-elevated text-left w-full active:scale-[0.97] transition-transform disabled:cursor-default animate-fade-up"
     >
-      <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-3 ${iconCls}`}>
+      {/* Icon square */}
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconBg}`}>
         {icon}
       </div>
-      <p className="text-xl font-bold text-zinc-900 tracking-tight">{value}</p>
-      <p className="text-[11px] font-semibold text-zinc-400 mt-0.5 uppercase tracking-wide">{label}</p>
-      <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>
+      {/* Value */}
+      <p className="text-xl font-extrabold text-zinc-900 tracking-tight tabular-nums leading-none">
+        {value}
+      </p>
+      {/* Label */}
+      <p className="text-[10px] font-bold text-zinc-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
+      {/* Sub */}
+      <p className={`text-[11px] mt-0.5 font-medium ${alert ? 'text-red-500' : 'text-zinc-400'}`}>{sub}</p>
     </button>
   )
 }

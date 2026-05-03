@@ -98,36 +98,43 @@ export default function Catalog() {
   }
 
   return (
-    <div className="px-4 pt-6 pb-28 space-y-5 max-w-lg mx-auto">
+    <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Catalog</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowPaste(!showPaste)}
-            className="text-sm bg-zinc-100 text-zinc-600 px-3 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
-          >
-            Paste
-          </button>
-          <button
-            onClick={() => setShowImport(true)}
-            className="flex items-center gap-1.5 text-sm bg-zinc-100 text-zinc-600 px-3 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
-          >
-            <Upload size={14} /> Import
-          </button>
-          <button
-            onClick={() => { setShowAdd(!showAdd); setEditId(null) }}
-            className="flex items-center gap-1.5 bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-semibold text-sm active:scale-95 transition-transform shadow-sm shadow-emerald-100"
-          >
-            <Plus size={15} /> Add
-          </button>
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
+           style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
+          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Catalog</h1>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setShowPaste(!showPaste)}
+              className="text-xs bg-white border border-zinc-200 text-zinc-600 px-3 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
+              style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+            >
+              Paste
+            </button>
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-1 text-xs bg-white border border-zinc-200 text-zinc-600 px-3 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
+              style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+            >
+              <Upload size={13} /> Import
+            </button>
+            <button
+              onClick={() => { setShowAdd(!showAdd); setEditId(null) }}
+              className="btn-primary py-2 px-3.5 text-xs w-auto flex items-center gap-1"
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
         </div>
       </div>
 
+      <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
+
       {/* Paste import */}
       {showPaste && (
-        <div className="card space-y-3">
+        <div className="card-elevated space-y-3 animate-slide-up">
           <p className="font-semibold text-zinc-800 text-sm">Paste from WhatsApp</p>
           <p className="text-xs text-zinc-400">One item per line, e.g. "Parle-G 10"</p>
           <textarea
@@ -145,11 +152,16 @@ export default function Catalog() {
 
       {/* Add/Edit form */}
       {(showAdd || editId) && (
-        <div className="card space-y-4 border-emerald-100">
+        <div className="card-elevated space-y-4 animate-slide-up">
           <div className="flex items-center justify-between">
-            <p className="font-bold text-zinc-900 text-sm">{editId ? 'Edit Product' : 'Add Product'}</p>
-            <button onClick={() => { setShowAdd(false); setEditId(null) }} className="text-zinc-400 hover:text-zinc-600 transition-colors">
-              <X size={18} />
+            <p className="font-bold text-zinc-900 flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center">
+                <Package size={14} className="text-sky-600" />
+              </span>
+              {editId ? 'Edit Product' : 'Add Product'}
+            </p>
+            <button onClick={() => { setShowAdd(false); setEditId(null) }} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
+              <X size={16} />
             </button>
           </div>
 
@@ -205,10 +217,14 @@ export default function Catalog() {
       )}
 
       {/* Voice */}
-      <div className="card flex flex-col items-center py-5 gap-3 border-dashed">
+      <div className="card flex flex-col items-center py-6 gap-3"
+           style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)' }}>
         <VoiceButton onResult={handleVoiceResult} size="md" label="Speak to add or update" />
-        <p className="text-xs text-zinc-400 text-center">Try: "Add Maggi 14 rupees" or "Mark Parle-G out of stock"</p>
-        {voiceText && <p className="text-xs text-zinc-500 italic bg-zinc-50 px-3 py-2 rounded-lg">"{voiceText}"</p>}
+        <div className="text-center">
+          <p className="text-xs font-semibold text-emerald-700">Voice commands</p>
+          <p className="text-xs text-zinc-400 mt-0.5">"Add Maggi 14 rupees" · "Mark Parle-G out of stock"</p>
+        </div>
+        {voiceText && <p className="text-xs text-zinc-600 italic bg-white/70 px-3 py-2 rounded-xl w-full text-center">"{voiceText}"</p>}
       </div>
 
       {/* Search */}
@@ -236,12 +252,15 @@ export default function Catalog() {
 
       {/* Product list */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center py-16 text-zinc-300">
-          <Package size={36} strokeWidth={1.2} className="mb-3" />
-          <p className="font-semibold text-zinc-400">No products found</p>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <Package size={28} strokeWidth={1.4} className="text-zinc-300" />
+          </div>
+          <p className="text-sm font-semibold text-zinc-400">No products found</p>
+          <p className="text-xs text-zinc-300">Add your first product above</p>
         </div>
       ) : (
-        <div className="card p-0 overflow-hidden divide-y divide-zinc-50">
+        <div className="card p-0 overflow-hidden divide-y divide-zinc-50/80">
           {filtered.map(p => (
             <ProductRow
               key={p.id}
@@ -256,6 +275,8 @@ export default function Catalog() {
           ))}
         </div>
       )}
+
+      </div>{/* end page content */}
     </div>
   )
 }
