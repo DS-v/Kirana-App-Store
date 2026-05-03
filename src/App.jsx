@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { ToastProvider } from './components/Toast'
 import BottomNav from './components/BottomNav'
@@ -6,7 +6,6 @@ import Dashboard from './pages/Dashboard'
 import Catalog from './pages/Catalog'
 import Orders from './pages/Orders'
 import Customers from './pages/Customers'
-import EndOfDay from './pages/EndOfDay'
 import Auth from './pages/Auth'
 import useStore from './store/useStore'
 import supabase, { isConfigured } from './lib/supabase'
@@ -68,7 +67,7 @@ function AppShell() {
             <Route path="/catalog"   element={<Catalog />} />
             <Route path="/orders"    element={<Orders />} />
             <Route path="/customers" element={<Customers />} />
-            <Route path="/day"       element={<EndOfDay />} />
+            <Route path="/day"       element={<Navigate to="/orders" replace />} />
           </Routes>
         </div>
         <BottomNav />

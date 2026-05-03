@@ -2,100 +2,189 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Fonts & base ─────────────────────────────────────────────────────────── */
 @layer base {
   html, body {
-    @apply h-full bg-zinc-50;
+    @apply h-full;
+    background-color: #f5f5f0;   /* warm off-white — warmer than zinc-50 */
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
-    font-feature-settings: "kern" 1, "liga" 1;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   #root { @apply h-full; }
+
+  /* Consistent focus ring everywhere except mouse users */
+  :focus-visible {
+    @apply outline-none ring-2 ring-emerald-400 ring-offset-1;
+  }
+
+  /* Smooth tap targets */
+  button, a, label[role] { @apply select-none; }
 }
 
+/* ── Component layer ──────────────────────────────────────────────────────── */
 @layer components {
+
   /* ── Buttons ─────────────────────────────────────────── */
   .btn-primary {
-    @apply bg-emerald-500 text-white font-semibold py-3.5 px-6 rounded-xl
-           text-base active:scale-[0.97] transition-all w-full
-           hover:bg-emerald-600 shadow-sm shadow-emerald-100;
+    @apply relative overflow-hidden w-full font-bold py-3.5 px-6 rounded-2xl
+           text-sm text-white tracking-wide
+           active:scale-[0.97] transition-transform;
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    box-shadow: 0 4px 14px rgba(16,185,129,0.38), 0 1px 3px rgba(0,0,0,0.08);
   }
+  .btn-primary:active {
+    box-shadow: 0 1px 4px rgba(16,185,129,0.25);
+  }
+  .btn-primary::after {
+    content: '';
+    @apply absolute inset-0 rounded-2xl;
+    background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 60%);
+    pointer-events: none;
+  }
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+    box-shadow: none;
+  }
+
   .btn-secondary {
-    @apply bg-zinc-100 text-zinc-700 font-semibold py-3.5 px-6 rounded-xl
-           text-base active:scale-[0.97] transition-all w-full
-           hover:bg-zinc-200;
+    @apply w-full font-semibold py-3.5 px-6 rounded-2xl text-sm
+           text-zinc-700 bg-white border border-zinc-200
+           active:scale-[0.97] transition-transform;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
+  .btn-secondary:active {
+    @apply bg-zinc-50;
+  }
+
   .btn-ghost {
-    @apply text-zinc-500 font-medium py-2 px-3 rounded-lg
-           text-sm active:scale-[0.97] transition-all
-           hover:bg-zinc-100;
+    @apply font-semibold py-2 px-3 rounded-xl text-sm text-zinc-500
+           active:scale-[0.97] transition-all hover:bg-zinc-100 hover:text-zinc-700;
   }
 
   /* ── Cards ───────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-2xl border border-zinc-100 p-4;
+    @apply bg-white rounded-2xl p-4;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   }
   .card-sm {
-    @apply bg-white rounded-xl border border-zinc-100 p-3;
+    @apply bg-white rounded-xl p-3;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  /* Elevated card — for modals, overlapping hero elements */
+  .card-elevated {
+    @apply bg-white rounded-2xl p-4;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.09), 0 2px 6px rgba(0,0,0,0.05);
   }
 
   /* ── Inputs ──────────────────────────────────────────── */
   .input-field {
     @apply w-full border border-zinc-200 rounded-xl px-4 py-3
-           text-base text-zinc-900 placeholder-zinc-400
-           focus:outline-none focus:ring-2 focus:ring-emerald-400
-           focus:border-transparent bg-white transition-shadow;
+           text-sm text-zinc-900 placeholder-zinc-400
+           focus:outline-none focus:ring-2 focus:ring-emerald-400/60
+           focus:border-emerald-300 transition-all;
+    background-color: #fafaf8;
+  }
+  .input-field:focus {
+    background-color: #ffffff;
+  }
+
+  /* ── Labels ──────────────────────────────────────────── */
+  .field-label {
+    @apply block text-xs font-semibold text-zinc-500 mb-1.5 tracking-wide;
   }
 
   /* ── Status badges ───────────────────────────────────── */
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
   }
-  .status-confirmed { @apply badge bg-emerald-50 text-emerald-700; }
-  .status-pending   { @apply badge bg-amber-50  text-amber-700; }
-  .status-packed    { @apply badge bg-sky-50    text-sky-700; }
-  .status-delivered { @apply badge bg-violet-50 text-violet-700; }
-  .status-credit    { @apply badge bg-orange-50 text-orange-700; }
-  .status-cancelled { @apply badge bg-zinc-100  text-zinc-500; }
+  .status-confirmed { @apply badge bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100; }
+  .status-pending   { @apply badge bg-amber-50   text-amber-700   ring-1 ring-amber-100; }
+  .status-packed    { @apply badge bg-sky-50     text-sky-700     ring-1 ring-sky-100; }
+  .status-delivered { @apply badge bg-violet-50  text-violet-700  ring-1 ring-violet-100; }
+  .status-credit    { @apply badge bg-orange-50  text-orange-700  ring-1 ring-orange-100; }
+  .status-cancelled { @apply badge bg-zinc-100   text-zinc-500    ring-1 ring-zinc-200; }
 
   /* ── Section label ───────────────────────────────────── */
   .section-label {
-    @apply text-xs font-semibold text-zinc-400 uppercase tracking-widest;
+    @apply text-[11px] font-bold text-zinc-400 uppercase tracking-[0.1em];
   }
 
-  /* ── Segmented control (filter / tab bar) ────────────── */
+  /* ── Segmented control ───────────────────────────────── */
   .seg-bar {
-    @apply flex gap-1 bg-zinc-100 rounded-xl p-1 overflow-x-auto;
+    @apply flex gap-1 rounded-2xl p-1 overflow-x-auto;
+    background: rgba(0,0,0,0.05);
     scrollbar-width: none;
   }
   .seg-bar::-webkit-scrollbar { display: none; }
-
   .seg-item {
-    @apply flex-shrink-0 px-3.5 py-1.5 rounded-lg text-sm font-semibold
+    @apply flex-shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-semibold
            transition-all text-zinc-500 whitespace-nowrap;
   }
   .seg-item-active {
-    @apply bg-white text-zinc-900 shadow-sm;
+    @apply bg-white text-zinc-900;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  /* ── Divider ─────────────────────────────────────────── */
+  .divider {
+    @apply flex items-center gap-3 my-1;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    @apply flex-1 h-px bg-zinc-100;
+  }
+
+  /* ── List rows ───────────────────────────────────────── */
+  .list-row {
+    @apply flex items-center gap-3 px-4 py-3.5 active:bg-zinc-50/80 transition-colors;
+  }
+
+  /* ── Page container ──────────────────────────────────── */
+  .page {
+    @apply pb-32 min-h-full;
+    animation: fade-up 0.22s ease-out;
+  }
+  .page-content {
+    @apply px-4 max-w-lg mx-auto;
   }
 }
 
-/* Tap target */
-.tap-target {
-  min-height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* ── Utilities ────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+    @apply flex items-center justify-center;
+  }
+
+  /* Safe area — for notched / pill-shaped phones */
+  .pb-safe    { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .safe-bottom { margin-bottom: env(safe-area-inset-bottom, 0px); }
 }
 
-/* Voice pulse */
-@keyframes voice-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
-  50%       { transform: scale(1.06); box-shadow: 0 0 0 14px rgba(16,185,129,0); }
-}
+/* ── Voice button animation ───────────────────────────────────────────────── */
 .voice-active {
   animation: voice-pulse 1.4s ease-in-out infinite;
 }
 
-/* Hide scrollbar */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* ── Shimmer skeleton ─────────────────────────────────────────────────────── */
+.shimmer {
+  background: linear-gradient(90deg, #f0f0eb 25%, #e8e8e2 50%, #f0f0eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* ── Prose for empty states ───────────────────────────────────────────────── */
+.empty-state {
+  @apply flex flex-col items-center gap-3 py-16 text-center;
+}
+.empty-state-icon {
+  @apply w-16 h-16 rounded-3xl flex items-center justify-center;
+  background: rgba(0,0,0,0.04);
+}
