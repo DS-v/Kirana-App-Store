@@ -63,31 +63,41 @@ export default function Customers() {
   }
 
   return (
-    <div className="px-4 pt-6 pb-28 space-y-5 max-w-lg mx-auto">
+    <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Customers</h1>
-          {totalDue > 0 && (
-            <p className="text-xs font-semibold text-orange-500 mt-0.5">₹{totalDue} total udhaar due</p>
-          )}
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
+           style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
+          <div>
+            <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Customers</h1>
+            {totalDue > 0 && (
+              <p className="text-[11px] font-bold text-orange-500 mt-0.5">₹{totalDue.toLocaleString('en-IN')} udhaar due</p>
+            )}
+          </div>
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="btn-primary py-2 px-4 text-sm w-auto flex items-center gap-1.5"
+          >
+            <Plus size={15} /> Add
+          </button>
         </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="flex items-center gap-1.5 bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-semibold text-sm active:scale-95 transition-transform shadow-sm shadow-emerald-100"
-        >
-          <Plus size={15} /> Add
-        </button>
       </div>
+
+      <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
 
       {/* Add customer form */}
       {showAdd && (
-        <div className="card space-y-4 border-emerald-100">
+        <div className="card-elevated space-y-4 animate-slide-up">
           <div className="flex items-center justify-between">
-            <p className="font-bold text-zinc-900 text-sm">New Customer</p>
-            <button onClick={() => setShowAdd(false)} className="text-zinc-400 hover:text-zinc-600 transition-colors">
-              <X size={18} />
+            <p className="font-bold text-zinc-900 flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
+                <Users size={14} className="text-orange-500" />
+              </span>
+              New Customer
+            </p>
+            <button onClick={() => setShowAdd(false)} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
+              <X size={16} />
             </button>
           </div>
 
@@ -127,9 +137,12 @@ export default function Customers() {
 
       {/* Empty state */}
       {filtered.length === 0 && (
-        <div className="flex flex-col items-center py-16 text-zinc-300">
-          <Users size={36} strokeWidth={1.2} className="mb-3" />
-          <p className="font-semibold text-zinc-400">No customers yet</p>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <Users size={28} strokeWidth={1.4} className="text-zinc-300" />
+          </div>
+          <p className="text-sm font-semibold text-zinc-400">No customers yet</p>
+          <p className="text-xs text-zinc-300">Add your regulars to track udhaar</p>
         </div>
       )}
 
@@ -138,13 +151,14 @@ export default function Customers() {
         {filtered.map(cust => {
           const expanded  = expandedId === cust.id
           const custOrders = customerOrders(cust)
+          const hasUdhaar = (cust.udhaar || 0) > 0
 
           return (
-            <div key={cust.id} className="card space-y-3">
+            <div key={cust.id} className="card space-y-3 animate-fade-up">
               {/* Customer header */}
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-zinc-600 font-bold text-base">{cust.name[0].toUpperCase()}</span>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${hasUdhaar ? 'bg-orange-100' : 'bg-zinc-100'}`}>
+                  <span className={`font-bold text-base ${hasUdhaar ? 'text-orange-600' : 'text-zinc-600'}`}>{cust.name[0].toUpperCase()}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-zinc-900 text-sm">{cust.name}</p>
@@ -239,6 +253,8 @@ export default function Customers() {
           )
         })}
       </div>
+
+      </div>{/* end page content */}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WAButton from '../components/WAButton'
@@ -8,12 +8,15 @@ import VoiceButton from '../components/VoiceButton'
 import IncomingMessageBanner from '../components/IncomingMessageBanner'
 import ImageOrderScanner from '../components/ImageOrderScanner'
 import { parseOrderMessage, orderTotal } from '../utils/orderParser'
+import supabase from '../lib/supabase'
+import { format, startOfWeek, startOfMonth } from 'date-fns'
 import {
   sendOrderAcknowledgement,
   sendOrderConfirmation,
   sendOrderPacked,
   sendOrderDelivered,
   sendOutOfStockNotice,
+  sendEndOfDaySummary,
 } from '../utils/whatsapp'
 
 const STATUSES = ['pending', 'confirmed', 'packed', 'delivered', 'credit', 'cancelled']
@@ -44,6 +47,8 @@ export default function Orders() {
   const products    = useStore(s => s.products)
   const customers   = useStore(s => s.customers)
   const orders      = useStore(s => s.orders)
+  const shopName    = useStore(s => s.shopName)
+  const ownerPhone  = useStore(s => s.ownerPhone)
   const addOrder    = useStore(s => s.addOrder)
   const updateOrder = useStore(s => s.updateOrder)
   const deleteOrder = useStore(s => s.deleteOrder)
@@ -61,6 +66,10 @@ export default function Orders() {
   const [expandedId, setExpandedId]       = useState(null)
   const [filterStatus, setFilterStatus]   = useState('all')
   const [aiParsing, setAiParsing]         = useState(false)   // LLM request in-flight
+  const [view, setView]                   = useState('list')  // 'list' | 'summary'
+  const [period, setPeriod]               = useState('day')   // 'day' | 'week' | 'month'
+  const [custSearch, setCustSearch]       = useState('')      // customer picker search text
+  const [showCustDrop, setShowCustDrop]   = useState(false)   // dropdown open?
 
   // ── Parser helpers ─────────────────────────────────────────────────────────
 
@@ -96,14 +105,19 @@ export default function Orders() {
     }))
 
     const BACKEND = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
 
     setAiParsing(true)
     try {
       const resp = await fetch(`${BACKEND}/api/llm/parse-order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ message: text, catalog }),
-        signal: AbortSignal.timeout(8000),   // 8 s — Groq p50 is ~500 ms
+        signal: AbortSignal.timeout(8000),
       })
 
       if (resp.ok) {
@@ -144,11 +158,13 @@ export default function Orders() {
     runParser(transcript)
   }
 
-  // Image OCR: extracted text → parser (same path as voice/paste)
-  function handleImageText(text) {
-    setPasteMsg(text)
+  // Image: AI vision already matched items — drop them straight into the form
+  function handleImageItems({ items, unrecognised: unk, source }) {
+    setParsedItems(items)
+    setUnrecognised(unk)
     setShowNew(true)
-    runParser(text)
+    const msg = `${items.length} item${items.length !== 1 ? 's' : ''} matched (${source})${unk.length ? `, ${unk.length} unrecognised` : ''}`
+    toast(msg, items.length ? 'success' : 'info')
   }
 
   function handleParse() { runParser(pasteMsg) }
@@ -171,7 +187,7 @@ export default function Orders() {
       if (customerPhone && status === 'confirmed')
         window.open(sendOrderConfirmation(customerPhone, customerName, parsedItems, total), '_blank')
       setPasteMsg(''); setCustomerName(''); setCustomerPhone(''); setParsedItems([]); setUnrecognised([])
-      setShowNew(false)
+      setCustSearch(''); setShowNew(false)
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -180,10 +196,35 @@ export default function Orders() {
   const todayOrders = filtered.filter(o => new Date(o.createdAt).toDateString() === today)
   const olderOrders = filtered.filter(o => new Date(o.createdAt).toDateString() !== today)
 
+  // ── Summary calculations ───────────────────────────────────────────────────
+  const now = new Date()
+  const periodStart = period === 'day'
+    ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    : period === 'week'
+      ? startOfWeek(now, { weekStartsOn: 1 })
+      : startOfMonth(now)
+  const periodOrders = orders.filter(o => new Date(o.createdAt) >= periodStart)
+
+  const sumTotal     = periodOrders.length
+  const sumFulfilled = periodOrders.filter(o => ['confirmed','packed','delivered'].includes(o.status)).length
+  const sumPending   = periodOrders.filter(o => o.status === 'pending').length
+  const sumCancelled = periodOrders.filter(o => o.status === 'cancelled').length
+  const sumCredit    = periodOrders.filter(o => o.status === 'credit').reduce((s,o) => s + (o.total||0), 0)
+  const sumCollected = periodOrders
+    .filter(o => ['confirmed','packed','delivered'].includes(o.status))
+    .reduce((s,o) => s + (o.total||0), 0)
+  const totalUdhaar  = customers.reduce((s,c) => s + (c.udhaar||0), 0)
+  const debtors      = customers.filter(c => c.udhaar > 0)
+  const oosItems     = products.filter(p => !p.inStock)
+
+  const PERIOD_LABEL = { day: 'Today', week: 'This Week', month: 'This Month' }
+  const summaryText = `📊 *${PERIOD_LABEL[period]} Summary*\n🏪 ${shopName || 'My Store'}\n\n📦 Orders: ${sumTotal}\n✅ Fulfilled: ${sumFulfilled}\n⏳ Pending: ${sumPending}\n❌ Cancelled: ${sumCancelled}\n💵 Collected: ₹${sumCollected.toLocaleString('en-IN')}\n📋 Credit: ₹${sumCredit.toLocaleString('en-IN')}\n💰 Total Udhaar: ₹${totalUdhaar.toLocaleString('en-IN')}${oosItems.length ? `\n⚠️ OOS: ${oosItems.map(p=>p.name).join(', ')}` : ''}\n\n_Kirana Smart Orders_`
+
   // Path B: incoming message from whatsapp-web.js → pre-fill form
   function handleIncomingOpen(msg) {
     setCustomerPhone(msg.from_phone || '')
     setCustomerName(msg.from_name || '')
+    setCustSearch(msg.from_name || '')
     setPasteMsg(msg.message)
     setShowNew(true)
     runParser(msg.message)
@@ -200,47 +241,211 @@ export default function Orders() {
     : null
 
   return (
-    <div className="px-4 pt-6 pb-28 space-y-5 max-w-lg mx-auto">
+    <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Orders</h1>
-        <button
-          onClick={() => setShowNew(!showNew)}
-          className="flex items-center gap-1.5 bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-semibold text-sm active:scale-95 transition-transform shadow-sm shadow-emerald-100"
-        >
-          <Plus size={15} /> New
-        </button>
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
+           style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
+          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Orders</h1>
+          <div className="flex items-center gap-2">
+            {/* List / Summary toggle */}
+            <div className="flex items-center bg-zinc-100 rounded-xl p-1 gap-0.5">
+              <button
+                onClick={() => setView('list')}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400'
+                }`}
+              >
+                <List size={13} /> List
+              </button>
+              <button
+                onClick={() => setView('summary')}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  view === 'summary' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400'
+                }`}
+              >
+                <BarChart2 size={13} /> Summary
+              </button>
+            </div>
+            <button
+              onClick={() => { setShowNew(!showNew); if (view === 'summary') setView('list') }}
+              className="btn-primary py-2 px-3.5 text-sm w-auto flex items-center gap-1.5"
+            >
+              <Plus size={15} /> New
+            </button>
+          </div>
+        </div>
       </div>
+
+      <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
+
+      {/* ── SUMMARY VIEW ──────────────────────────────────────────────────── */}
+      {view === 'summary' && (
+        <div className="space-y-4 animate-fade-in">
+          {/* Period selector */}
+          <div className="seg-bar">
+            {[['day','Today'],['week','This Week'],['month','This Month']].map(([val,label]) => (
+              <button key={val} onClick={() => setPeriod(val)}
+                className={`seg-item ${period === val ? 'seg-item-active' : ''}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <SumCard icon={<ShoppingBag size={17}/>} label="Total Orders"  value={sumTotal}                                      sub="for the period"           color="emerald" />
+            <SumCard icon={<TrendingUp size={17}/>}  label="Collected"     value={`₹${sumCollected.toLocaleString('en-IN')}`}    sub="cash received"            color="sky" />
+            <SumCard icon={<Package size={17}/>}     label="Fulfilled"     value={sumFulfilled}                                  sub="orders"                   color="violet" />
+            <SumCard icon={<Users size={17}/>}       label="Credit Issued" value={`₹${sumCredit.toLocaleString('en-IN')}`}       sub={`${periodOrders.filter(o=>o.status==='credit').length} orders`} color="orange" />
+            <SumCard icon={<Clock size={17}/>}       label="Pending"       value={sumPending}                                    sub="orders"                   color="amber" />
+            <SumCard icon={<XCircle size={17}/>}     label="Cancelled"     value={sumCancelled}                                  sub="orders"                   color="zinc" />
+          </div>
+
+          {/* Udhaar overview */}
+          {debtors.length > 0 && (
+            <div className="card space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
+                  <Users size={14} className="text-orange-500" />
+                </div>
+                <p className="font-bold text-zinc-900 text-sm flex-1">Udhaar Outstanding</p>
+                <span className="font-bold text-orange-500">₹{totalUdhaar.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="divide-y divide-zinc-50">
+                {debtors.slice(0,5).map(c => (
+                  <div key={c.id} className="flex justify-between text-sm py-2">
+                    <span className="text-zinc-600">{c.name}</span>
+                    <span className="font-semibold text-zinc-900">₹{c.udhaar}</span>
+                  </div>
+                ))}
+                {debtors.length > 5 && (
+                  <p className="text-xs text-zinc-400 pt-2">+{debtors.length - 5} more customers</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Out of stock */}
+          {oosItems.length > 0 && (
+            <div className="card space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
+                  <AlertTriangle size={14} className="text-red-500" />
+                </div>
+                <p className="font-bold text-zinc-900 text-sm flex-1">Out of Stock</p>
+                <span className="text-xs font-bold text-red-500">{oosItems.length} items</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {oosItems.map(p => (
+                  <span key={p.id} className="px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium">{p.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Order breakdown for period */}
+          {periodOrders.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-50">
+                <ShoppingBag size={14} className="text-zinc-400" />
+                <p className="font-bold text-zinc-900 text-sm">{PERIOD_LABEL[period]} Orders</p>
+                <span className="ml-auto text-xs text-zinc-400">{periodOrders.length} total</span>
+              </div>
+              <div className="divide-y divide-zinc-50/80 max-h-64 overflow-y-auto no-scrollbar">
+                {periodOrders.map(o => (
+                  <div key={o.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-zinc-800 truncate">{o.customerName || 'Customer'}</p>
+                      <p className="text-xs text-zinc-400">{format(new Date(o.createdAt), 'd MMM, h:mm a')}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold text-zinc-900 tabular-nums">₹{o.total || 0}</span>
+                      <span className={STATUS_COLOR[o.status] || 'badge bg-zinc-100 text-zinc-500'}>{STATUS_LABEL[o.status]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Summary preview + share */}
+          <div className="card space-y-3">
+            <p className="section-label">Summary Preview</p>
+            <pre className="text-xs text-zinc-600 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
+          </div>
+          <div className="space-y-2">
+            <WAButton
+              href={sendEndOfDaySummary(ownerPhone, { date: PERIOD_LABEL[period], totalOrders: sumTotal, fulfilled: sumFulfilled, missed: sumCancelled, collected: sumCollected, credit: sumCredit, stockAlerts: oosItems.map(p=>p.name) })}
+              label={`Share ${PERIOD_LABEL[period]} Summary`}
+              size="md"
+              block
+            />
+            <button
+              onClick={() => navigator.clipboard?.writeText(summaryText).then(() => alert('Copied!')).catch(() => {})}
+              className="btn-secondary flex items-center justify-center gap-2"
+            >
+              <Share2 size={16} /> Copy Summary
+            </button>
+          </div>
+
+          {sumTotal === 0 && (
+            <div className="empty-state">
+              <div className="empty-state-icon"><BarChart2 size={28} className="text-zinc-300" /></div>
+              <p className="text-sm font-semibold text-zinc-400">No orders {PERIOD_LABEL[period].toLowerCase()}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
+      {view === 'list' && <>
 
       {/* Path B: auto-ingested WhatsApp messages — tap to open as order */}
       <IncomingMessageBanner onOpen={handleIncomingOpen} />
 
       {/* New order panel */}
       {showNew && (
-        <div className="card space-y-4 border-emerald-100">
+        <div className="card-elevated space-y-4 animate-slide-up">
           <div className="flex items-center justify-between">
-            <p className="font-bold text-zinc-900 flex items-center gap-2 text-sm">
-              <MessageSquare size={16} className="text-emerald-500" /> New Order
+            <p className="font-bold text-zinc-900 flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <MessageSquare size={14} className="text-emerald-600" />
+              </span>
+              New Order
             </p>
-            <button onClick={() => setShowNew(false)} className="text-zinc-400 hover:text-zinc-600 transition-colors">
-              <X size={18} />
+            <button onClick={() => setShowNew(false)} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
+              <X size={16} />
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-500">Customer Name *</label>
-              <input className="input-field" placeholder="Ramesh ji" value={customerName} onChange={e => setCustomerName(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-500">WhatsApp No.</label>
-              <input className="input-field" type="tel" inputMode="numeric" placeholder="9876543210" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
-            </div>
-          </div>
+          {/* ── Customer picker ─────────────────────────────────────────── */}
+          <CustomerPicker
+            customers={customers}
+            name={customerName}
+            phone={customerPhone}
+            search={custSearch}
+            showDrop={showCustDrop}
+            onSearchChange={val => {
+              setCustSearch(val)
+              setCustomerName(val)
+              setCustomerPhone('')
+              setShowCustDrop(true)
+            }}
+            onSelect={c => {
+              setCustomerName(c.name)
+              setCustomerPhone(c.phone || '')
+              setCustSearch(c.name)
+              setShowCustDrop(false)
+            }}
+            onPhoneChange={val => setCustomerPhone(val)}
+            onBlur={() => setTimeout(() => setShowCustDrop(false), 150)}
+            onFocus={() => setShowCustDrop(true)}
+          />
 
           {/* Voice input — speak the order directly */}
-          <div className="flex items-center gap-3 bg-zinc-50 border border-zinc-100 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3 bg-zinc-50 rounded-2xl px-4 py-3">
             <VoiceButton
               onResult={handleVoiceResult}
               onInterim={t => setVoiceInterim(t)}
@@ -260,7 +465,7 @@ export default function Orders() {
 
           {/* Image scan */}
           <ImageOrderScanner
-            onTextReady={handleImageText}
+            onItemsReady={handleImageItems}
             onError={msg => toast(msg, 'info')}
           />
 
@@ -375,10 +580,12 @@ export default function Orders() {
 
       {/* Empty state */}
       {filtered.length === 0 && (
-        <div className="flex flex-col items-center py-16 text-zinc-300">
-          <ShoppingBag size={36} strokeWidth={1.2} className="mb-3" />
-          <p className="font-semibold text-zinc-400">No orders yet</p>
-          <p className="text-sm text-zinc-300 mt-1">Tap New to add your first order</p>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <ShoppingBag size={28} strokeWidth={1.4} className="text-zinc-300" />
+          </div>
+          <p className="text-sm font-semibold text-zinc-400">No orders yet</p>
+          <p className="text-xs text-zinc-300">Tap New to add your first order</p>
         </div>
       )}
 
@@ -392,6 +599,10 @@ export default function Orders() {
             setExpandedId={setExpandedId} updateOrder={updateOrder} deleteOrder={deleteOrder} toast={toast} />
         )}
       </div>
+
+      </>}{/* end list view */}
+
+      </div>{/* end page content */}
     </div>
   )
 }
@@ -533,6 +744,109 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
               Delete
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Summary stat card ──────────────────────────────────────────────────────────
+
+function SumCard({ icon, label, value, sub, color }) {
+  const colors = {
+    emerald: 'text-emerald-600 bg-emerald-500/10',
+    sky:     'text-sky-600 bg-sky-500/10',
+    violet:  'text-violet-600 bg-violet-500/10',
+    orange:  'text-orange-600 bg-orange-500/10',
+    amber:   'text-amber-600 bg-amber-500/10',
+    zinc:    'text-zinc-400 bg-zinc-500/10',
+  }
+  return (
+    <div className="card-elevated text-left animate-fade-up">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${colors[color] || colors.zinc}`}>
+        {icon}
+      </div>
+      <p className="text-xl font-extrabold text-zinc-900 tracking-tight tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] font-bold text-zinc-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
+      <p className="text-[11px] text-zinc-400 mt-0.5 font-medium">{sub}</p>
+    </div>
+  )
+}
+
+// ── Customer picker ────────────────────────────────────────────────────────────
+
+function CustomerPicker({ customers, name, phone, search, showDrop, onSearchChange, onSelect, onPhoneChange, onBlur, onFocus }) {
+  const matches = search.trim().length > 0
+    ? customers.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        (c.phone || '').includes(search)
+      ).slice(0, 6)
+    : customers.slice(0, 6)   // show 6 recents when field is focused empty
+
+  const selected = customers.find(c => c.name === name)
+
+  return (
+    <div className="space-y-3">
+      {/* Search field */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-zinc-500">Customer *</label>
+        <div className="relative">
+          <input
+            className="input-field pr-8"
+            placeholder="Search by name or number…"
+            value={search}
+            onChange={e => onSearchChange(e.target.value)}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            autoComplete="off"
+          />
+          {search && (
+            <button
+              onMouseDown={e => { e.preventDefault(); onSearchChange('') }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+            >
+              <X size={14} />
+            </button>
+          )}
+          {/* Dropdown */}
+          {showDrop && matches.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl overflow-hidden z-30"
+                 style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)' }}>
+              {matches.map(c => (
+                <button
+                  key={c.id}
+                  onMouseDown={e => { e.preventDefault(); onSelect(c) }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 active:bg-zinc-100 transition-colors border-b border-zinc-50 last:border-0"
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${(c.udhaar||0) > 0 ? 'bg-orange-100 text-orange-600' : 'bg-zinc-100 text-zinc-600'}`}>
+                    {c.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-zinc-900 truncate">{c.name}</p>
+                    {c.phone && <p className="text-xs text-zinc-400">{c.phone}</p>}
+                  </div>
+                  {(c.udhaar||0) > 0 && (
+                    <span className="text-xs font-bold text-orange-500 flex-shrink-0">₹{c.udhaar} due</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Phone — show once customer is typed/selected */}
+      {(selected || name.trim()) && (
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-zinc-500">WhatsApp No.</label>
+          <input
+            className="input-field"
+            type="tel"
+            inputMode="numeric"
+            placeholder="9876543210"
+            value={phone}
+            onChange={e => onPhoneChange(e.target.value)}
+          />
         </div>
       )}
     </div>
