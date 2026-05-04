@@ -1,11 +1,16 @@
-// Normalise the API URL: add https:// if no protocol is specified
-// (guards against Railway env var set as "foo.up.railway.app" without https://)
-function normaliseBase(url) {
-  if (!url) return 'http://localhost:3001'
-  if (/^https?:\/\//i.test(url)) return url.replace(/\/$/, '')
-  return `https://${url.replace(/\/$/, '')}`
+function getApiBase() {
+  const raw = import.meta.env.VITE_API_URL
+  if (raw) {
+    return /^https?:\/\//i.test(raw) ? raw.replace(/\/$/, '') : `https://${raw.replace(/\/$/, '')}`
+  }
+  // Fallback for Railway: frontend is kirana-frontend-*.up.railway.app,
+  // backend is kirana-app-store-*.up.railway.app
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.railway.app')) {
+    return `https://${window.location.hostname.replace(/^kirana-frontend/, 'kirana-app-store')}`
+  }
+  return 'http://localhost:3001'
 }
-const BASE = normaliseBase(import.meta.env.VITE_API_URL)
+const BASE = getApiBase()
 
 async function request(method, path, body) {
   const token = localStorage.getItem('kirana_token')
