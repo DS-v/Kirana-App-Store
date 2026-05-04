@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { Mic, MicOff } from 'lucide-react'
 import { isSpeechSupported, createRecognition } from '../utils/speech'
 
-export default function VoiceButton({ onResult, onInterim, size = 'md', label = 'Speak' }) {
+export default function VoiceButton({ onResult, onInterim, size = 'md', label = 'Speak', compact = false }) {
   const [listening, setListening] = useState(false)
   const [interim, setInterim] = useState('')
   const recRef = useRef(null)
@@ -10,10 +10,12 @@ export default function VoiceButton({ onResult, onInterim, size = 'md', label = 
   if (!isSpeechSupported()) return null
 
   const sizes = {
+    xs: 'w-9 h-9',
     sm: 'w-12 h-12',
     md: 'w-16 h-16',
     lg: 'w-20 h-20',
   }
+  const iconSize = size === 'xs' ? 15 : size === 'lg' ? 28 : 22
 
   function start() {
     const rec = createRecognition()
@@ -46,6 +48,23 @@ export default function VoiceButton({ onResult, onInterim, size = 'md', label = 
     setInterim('')
   }
 
+  // Compact / xs variant: icon-only button, no hint or interim — used inline.
+  if (compact || size === 'xs') {
+    return (
+      <button
+        onPointerDown={start}
+        onPointerUp={stop}
+        onPointerLeave={stop}
+        title={listening ? 'Sun raha hoon…' : 'Bolo'}
+        className={`${sizes[size] || sizes.xs} rounded-xl flex items-center justify-center transition-all
+          ${listening ? 'bg-red-500 voice-active' : 'bg-emerald-500 active:scale-95'}`}
+        aria-label={listening ? 'Listening…' : label}
+      >
+        {listening ? <MicOff size={iconSize} className="text-white" /> : <Mic size={iconSize} className="text-white" />}
+      </button>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center gap-2">
       <button
@@ -53,16 +72,10 @@ export default function VoiceButton({ onResult, onInterim, size = 'md', label = 
         onPointerUp={stop}
         onPointerLeave={stop}
         className={`${sizes[size]} rounded-full flex items-center justify-center shadow-lg transition-all
-          ${listening
-            ? 'bg-red-500 voice-active'
-            : 'bg-green-600 active:scale-95'
-          }`}
+          ${listening ? 'bg-red-500 voice-active' : 'bg-green-600 active:scale-95'}`}
         aria-label={listening ? 'Listening…' : label}
       >
-        {listening
-          ? <MicOff size={size === 'lg' ? 28 : 22} className="text-white" />
-          : <Mic size={size === 'lg' ? 28 : 22} className="text-white" />
-        }
+        {listening ? <MicOff size={iconSize} className="text-white" /> : <Mic size={iconSize} className="text-white" />}
       </button>
       {interim && (
         <p className="text-sm text-gray-500 italic text-center max-w-xs">{interim}…</p>

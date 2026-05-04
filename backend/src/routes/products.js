@@ -5,16 +5,13 @@ import { requireAuth } from '../middleware/auth.js'
 const router = Router()
 router.use(requireAuth)
 
-// Infer category from product name when not provided
+// Infer broad category from product name. We collapsed to 4 buckets:
+// Khaana (food + drinks + groceries), Snacks, Ghar (household), Other.
 function inferCategory(name) {
   const n = name.toLowerCase()
-  if (/milk|dahi|curd|paneer|butter|ghee|cheese|cream|lassi|chaas/.test(n))      return 'Dairy'
-  if (/biscuit|cookie|parle|oreo|marie|britannia|glucose|hide.*seek/.test(n))    return 'Biscuits'
-  if (/chips|namkeen|lays|kurkure|snack|bhujia|wafer|popcorn|murukku/.test(n))   return 'Snacks'
-  if (/maggi|noodle|pasta|vermicelli|yippee|top.*ramen/.test(n))                 return 'Noodles'
-  if (/tea|chai|coffee|juice|drink|water|soda|cola|pepsi|coke|sprite|thums|limca|frooti|maaza|appy|red bull|monster|sting/.test(n)) return 'Beverages'
-  if (/atta|flour|rice|dal|pulses|sugar|salt|oil|ghee|maida|besan|poha|sooji|rava|chana|rajma|masoor|moong|urad/.test(n)) return 'Staples'
-  if (/soap|detergent|shampoo|surf|rin|tide|vim|phenyl|harpic|toilet|broom|mop|brush|dettol|sanitizer|handwash/.test(n)) return 'Household'
+  if (/chips|namkeen|lays|kurkure|snack|bhujia|wafer|popcorn|murukku|biscuit|cookie|parle|oreo|marie|britannia|glucose|hide.*seek|maggi|noodle|pasta|vermicelli|yippee|top.*ramen|chocolate|kitkat|dairy.*milk|munch|5.*star/.test(n)) return 'Snacks'
+  if (/soap|detergent|shampoo|surf|rin|tide|vim|phenyl|harpic|toilet|broom|mop|brush|dettol|sanitizer|handwash|tissue|napkin|bulb|battery|matchbox|incense|agarbatti|candle|colgate|toothpaste|toothbrush/.test(n)) return 'Ghar'
+  if (/milk|dahi|curd|paneer|butter|ghee|cheese|cream|lassi|chaas|tea|chai|coffee|juice|drink|water|soda|cola|pepsi|coke|sprite|thums|limca|frooti|maaza|appy|red.?bull|monster|sting|atta|flour|rice|dal|pulses|sugar|salt|oil|maida|besan|poha|sooji|rava|chana|rajma|masoor|moong|urad|honey|jam|sauce|ketchup|pickle|achar|masala|spice/.test(n)) return 'Khaana'
   return 'Other'
 }
 

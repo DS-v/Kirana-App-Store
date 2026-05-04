@@ -37,14 +37,14 @@ router.post('/', async (req, res) => {
 
 function defaultProducts(shopId) {
   return [
-    { shop_id: shopId, name: 'Parle-G', aliases: ['parleg', 'parle g biscuit'], price: 10, unit: 'packet', category: 'Biscuits', in_stock: true },
-    { shop_id: shopId, name: 'Maggi Noodles', aliases: ['maggi', 'noodles'], price: 14, unit: 'packet', category: 'Noodles', in_stock: true },
-    { shop_id: shopId, name: 'Amul Milk 500ml', aliases: ['milk', 'amul', 'dudh'], price: 28, unit: 'packet', category: 'Dairy', in_stock: true },
-    { shop_id: shopId, name: 'Tata Salt 1kg', aliases: ['salt', 'namak'], price: 22, unit: 'kg', category: 'Staples', in_stock: true },
-    { shop_id: shopId, name: 'Surf Excel 200g', aliases: ['surf', 'detergent'], price: 45, unit: 'packet', category: 'Household', in_stock: true },
+    { shop_id: shopId, name: 'Parle-G', aliases: ['parleg', 'parle g biscuit'], price: 10, unit: 'packet', category: 'Snacks', in_stock: true },
+    { shop_id: shopId, name: 'Maggi Noodles', aliases: ['maggi', 'noodles'], price: 14, unit: 'packet', category: 'Snacks', in_stock: true },
+    { shop_id: shopId, name: 'Amul Milk 500ml', aliases: ['milk', 'amul', 'dudh'], price: 28, unit: 'packet', category: 'Khaana', in_stock: true },
+    { shop_id: shopId, name: 'Tata Salt 1kg', aliases: ['salt', 'namak'], price: 22, unit: 'kg', category: 'Khaana', in_stock: true },
+    { shop_id: shopId, name: 'Surf Excel 200g', aliases: ['surf', 'detergent'], price: 45, unit: 'packet', category: 'Ghar', in_stock: true },
     { shop_id: shopId, name: "Lay's Classic", aliases: ['lays', 'chips'], price: 20, unit: 'packet', category: 'Snacks', in_stock: true },
-    { shop_id: shopId, name: 'Tata Tea Premium', aliases: ['chai', 'tea'], price: 160, unit: '250g', category: 'Beverages', in_stock: true },
-    { shop_id: shopId, name: 'Rin Bar', aliases: ['rin', 'soap bar'], price: 12, unit: 'bar', category: 'Household', in_stock: false },
+    { shop_id: shopId, name: 'Tata Tea Premium', aliases: ['chai', 'tea'], price: 160, unit: '250g', category: 'Khaana', in_stock: true },
+    { shop_id: shopId, name: 'Rin Bar', aliases: ['rin', 'soap bar'], price: 12, unit: 'bar', category: 'Ghar', in_stock: false },
   ]
 }
 
