@@ -23,11 +23,29 @@ const useStore = create((set, get) => ({
     set({ token, shopId, shopName, ownerPhone: phone })
   },
 
-  logout: () => {
+  updateShopName: async (name) => {
+    const trimmed = (name || '').trim()
+    if (!trimmed || trimmed === get().shopName) return
+    // Persist everywhere: Supabase user_metadata, backend, local store, localStorage.
+    try {
+      const { default: supabase } = await import('../lib/supabase.js')
+      await supabase.auth.updateUser({ data: { shop_name: trimmed } })
+    } catch {}
+    try { await api.post('/api/shops', { name: trimmed }) } catch {}
+    localStorage.setItem('kirana_shop_name', trimmed)
+    set({ shopName: trimmed })
+  },
+
+  logout: async () => {
+    // Sign out from Supabase FIRST and await it. If we cleared local state first,
+    // Auth would mount, see the still-live Supabase session, and jump to the
+    // shop-name setup step before signOut completed.
+    try {
+      const { default: supabase } = await import('../lib/supabase.js')
+      await supabase.auth.signOut()
+    } catch {}
     ['kirana_token','kirana_shop_id','kirana_shop_name','kirana_phone'].forEach(k => localStorage.removeItem(k))
     set({ token: null, shopId: null, shopName: '', ownerPhone: '' })
-    // Sign out from Supabase so Auth component doesn't detect a live session on next render
-    import('../lib/supabase.js').then(({ default: supabase }) => supabase.auth.signOut())
   },
 
   // ── loading / error ────────────────────────────────────────────────────────
