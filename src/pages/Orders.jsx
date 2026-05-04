@@ -66,6 +66,8 @@ export default function Orders() {
   const [showCustDrop, setShowCustDrop]   = useState(false)   // dropdown open?
   const [sendWaReceipt, setSendWaReceipt] = useState(true)    // opt-in WA receipt on save
   const [swapTarget, setSwapTarget]       = useState(null)    // {idx, item} when ItemSwap is open
+  const [orderStatus, setOrderStatus]     = useState('delivered')   // 'pending' | 'delivered' | 'cancelled'
+  const [pay, setPay] = useState({ cash: '', upi: '', udhaar: '' })
   const parseDebounceRef                  = useRef(null)
   const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
@@ -185,24 +187,46 @@ export default function Orders() {
     setParsedItems(items => items.map((it, i) => i === idx ? { ...it, ...patch } : it))
   }
 
-  async function confirmOrder(status = 'confirmed') {
+  async function confirmOrder() {
     if (!customerName.trim()) return toast('Enter customer name', 'error')
     if (!parsedItems.length) return toast('No items in order', 'error')
+
     const total = orderTotal(parsedItems)
+    // Split payment — must sum to total (auto-distribute if all blank).
+    let cash   = parseFloat(pay.cash)   || 0
+    let upi    = parseFloat(pay.upi)    || 0
+    let udhaar = parseFloat(pay.udhaar) || 0
+    if (cash + upi + udhaar === 0) {
+      // Default = full cash.
+      cash = total
+    } else if (Math.abs(cash + upi + udhaar - total) > 0.01) {
+      return toast(`Payment split must equal ₹${total.toFixed(0)} (cash+UPI+udhaar)`, 'error')
+    }
+
     try {
-      await addOrder({ customerName: customerName.trim(), customerPhone: customerPhone.trim(), items: parsedItems, status, total, rawMessage: pasteMsg })
-      if (status === 'credit') {
+      await addOrder({
+        customerName:  customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        items:         parsedItems,
+        status:        orderStatus,
+        total,
+        rawMessage:    pasteMsg,
+        paidCash:      cash,
+        paidUpi:       upi,
+        paidUdhaar:    udhaar,
+      })
+      // If any portion is on udhaar, accumulate on the customer's ledger.
+      if (udhaar > 0) {
         const cust = customers.find(c => c.phone === customerPhone.trim())
-        if (cust) await addUdhaar(cust.id, total)
+        if (cust) await addUdhaar(cust.id, udhaar)
       }
       toast('Order saved!', 'success')
-      // WhatsApp receipt is now opt-in (sendWaReceipt checkbox above the
-      // sticky save row). The 'confirmed' branch covers legacy bookings —
-      // current statuses set by these buttons are 'delivered' / 'credit'.
-      if (sendWaReceipt && customerPhone && (status === 'delivered' || status === 'confirmed'))
+      if (sendWaReceipt && customerPhone && orderStatus === 'delivered') {
         window.open(sendOrderConfirmation(customerPhone, customerName, parsedItems, total), '_blank')
+      }
       setPasteMsg(''); setCustomerName(''); setCustomerPhone(''); setParsedItems([]); setUnrecognised([])
-      setCustSearch(''); setShowNew(false)
+      setCustSearch(''); setPay({ cash: '', upi: '', udhaar: '' }); setOrderStatus('delivered')
+      setShowNew(false)
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -616,7 +640,7 @@ export default function Orders() {
                 <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 hover:!bg-red-100" />
               )}
 
-              {/* Sticky save row — always reachable even with a long item list. */}
+              {/* Sticky save row — split payment + decoupled status. */}
               <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-zinc-100 space-y-2">
                 {/* Live total + WA toggle */}
                 <div className="flex items-center justify-between text-xs">
@@ -635,14 +659,38 @@ export default function Orders() {
                     </label>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => confirmOrder('delivered')} className="btn-primary py-3 text-sm flex items-center justify-center gap-1.5">
-                    <Check size={15} /> De diya
-                  </button>
-                  <button onClick={() => confirmOrder('credit')} className="btn-secondary py-3 text-sm">
-                    Udhaar
-                  </button>
+
+                {/* Payment split — must sum to total. Empty = full cash. */}
+                <div className="grid grid-cols-3 gap-2">
+                  <PayInput label="Cash"   value={pay.cash}   onChange={v => setPay(p => ({ ...p, cash: v }))} />
+                  <PayInput label="UPI"    value={pay.upi}    onChange={v => setPay(p => ({ ...p, upi: v }))} />
+                  <PayInput label="Udhaar" value={pay.udhaar} onChange={v => setPay(p => ({ ...p, udhaar: v }))} accent="orange" />
                 </div>
+
+                {/* Status pill — workflow only, decoupled from payment */}
+                <div className="flex gap-1.5 text-xs">
+                  {[
+                    { id: 'delivered', label: 'De diya', activeBg: 'bg-emerald-500' },
+                    { id: 'pending',   label: 'Bakaya',  activeBg: 'bg-amber-500'   },
+                    { id: 'cancelled', label: 'Cancel',  activeBg: 'bg-zinc-500'    },
+                  ].map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => setOrderStatus(s.id)}
+                      className={`flex-1 py-1.5 rounded-lg font-bold transition-colors ${
+                        orderStatus === s.id
+                          ? `${s.activeBg} text-white`
+                          : 'bg-zinc-100 text-zinc-500'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                <button onClick={confirmOrder} className="btn-primary py-3 text-sm flex items-center justify-center gap-1.5">
+                  <Check size={15} /> Save Order
+                </button>
               </div>
             </div>
           )}
@@ -988,6 +1036,27 @@ function SumCard({ icon, label, value, sub, color }) {
 }
 
 // ── Customer picker ────────────────────────────────────────────────────────────
+
+// Compact ₹ input cell for the payment split row at the bottom of Naya
+// Order. Empty = no contribution; the save handler defaults to "all cash"
+// when every cell is blank.
+function PayInput({ label, value, onChange, accent = 'zinc' }) {
+  const ring = accent === 'orange' ? 'focus:ring-orange-300' : 'focus:ring-emerald-300'
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">{label}</span>
+      <div className="flex items-center bg-white border border-zinc-200 rounded-lg overflow-hidden">
+        <span className="px-2 text-xs text-zinc-400">₹</span>
+        <input
+          type="number" inputMode="numeric" placeholder="0"
+          className={`w-full py-1.5 pr-1 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 ${ring}`}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+        />
+      </div>
+    </label>
+  )
+}
 
 // Search the catalog and add one item at a time to the cart. Autocomplete
 // ranks by token overlap + substring — same approach as ItemSwap.
