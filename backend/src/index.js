@@ -7,6 +7,7 @@ import customerRoutes from './routes/customers.js'
 import orderRoutes    from './routes/orders.js'
 import llmRoutes         from './routes/llm.js'
 import correctionsRoutes from './routes/corrections.js'
+import embeddingsRoutes  from './routes/embeddings.js'
 
 // ── env validation ────────────────────────────────────────────────────────────
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']
@@ -36,6 +37,7 @@ app.use('/api/customers', customerRoutes)
 app.use('/api/orders',    orderRoutes)
 app.use('/api/llm',         llmRoutes)
 app.use('/api/corrections', correctionsRoutes)
+app.use('/api/embeddings',  embeddingsRoutes)
 
 // ── WhatsApp routes (optional — only available if whatsapp-web.js is installed)
 try {

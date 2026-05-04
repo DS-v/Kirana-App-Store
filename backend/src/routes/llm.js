@@ -14,6 +14,7 @@
 
 import { Router } from 'express'
 import db from '../db.js'
+import { embed } from '../embeddings.js'
 import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
@@ -499,6 +500,33 @@ async function applyCorrections(message, shopId, catalog) {
   return { items, residualLines }
 }
 
+// Vector pre-filter: replace the full catalog with only the top-k products
+// most semantically similar to the customer's message. Drops prompt size
+// from O(catalog) to O(15) regardless of how big the shop is. If pgvector
+// isn't populated yet, returns the full catalog unchanged.
+async function vectorPreFilter(message, shopId, fullCatalog, topK = 30) {
+  if (!fullCatalog.length) return fullCatalog
+  try {
+    const queryVec = await embed(message.slice(0, 2000))   // cap input
+    const { data, error } = await db.rpc('match_products', {
+      p_shop:      shopId,
+      p_embedding: queryVec,
+      p_top_k:     topK,
+    })
+    if (error || !data?.length) return fullCatalog
+    // The RPC returns a subset of fields; reshape to match catalog shape
+    return data.map(p => ({
+      id:      p.id,
+      name:    p.name,
+      unit:    p.unit,
+      aliases: p.aliases || [],
+    }))
+  } catch (e) {
+    console.warn('[LLM] vector pre-filter unavailable, using full catalog:', e.message)
+    return fullCatalog
+  }
+}
+
 router.post('/parse-order', async (req, res) => {
   const { message, catalog = [] } = req.body
   if (!message || typeof message !== 'string')
@@ -515,6 +543,10 @@ router.post('/parse-order', async (req, res) => {
       llmInput = residualLines.join('\n').trim()
     }
   } catch (e) { console.warn('[LLM] correction lookup failed:', e.message) }
+
+  // 2. Vector pre-filter. Send only the top-30 semantically-similar products
+  //    to the LLM rather than the full 1000+. Big precision + latency win.
+  const focusCatalog = await vectorPreFilter(llmInput, req.userId, catalog, 30)
 
   // If everything resolved from corrections, short-circuit.
   if (preItems.length && !llmInput.trim()) {
@@ -536,7 +568,7 @@ router.post('/parse-order', async (req, res) => {
 
   try {
     return res.json({
-      ...mergeAndPostProcess(validate(await callGroq(llmInput, catalog))),
+      ...mergeAndPostProcess(validate(await callGroq(llmInput, focusCatalog))),
       source: 'groq',
       preMatched: preItems.length,
     })
@@ -544,7 +576,7 @@ router.post('/parse-order', async (req, res) => {
 
   try {
     return res.json({
-      ...mergeAndPostProcess(validate(await callGemini(llmInput, catalog))),
+      ...mergeAndPostProcess(validate(await callGemini(llmInput, focusCatalog))),
       source: 'gemini',
       preMatched: preItems.length,
     })
