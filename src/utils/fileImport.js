@@ -51,7 +51,7 @@ const CATEGORY_KEYWORDS = {
   Khaana: [
     'milk','curd','butter','paneer','ghee','cheese','cream','lassi','amul','dahi',
     'atta','flour','rice','dal','salt','sugar','oil','rava','maida','besan','poha','suji',
-    'tea','coffee','juice','drink','cold drink','pepsi','coke','sprite','chai','horlicks','boost','bournvita',
+    'tea','coffee','juice','drink','cold drink','pepsi','coke','cola','sprite','fanta','thums up','limca','frooti','maaza','chai','horlicks','boost','bournvita','complan','glucon','tang',
     'honey','jam','sauce','ketchup','pickle','achar','masala','spice',
   ],
 }
@@ -65,44 +65,87 @@ export function guessCategory(name) {
 
 export function guessUnit(text) {
   const t = text.toLowerCase()
-  for (const [k, v] of Object.entries(UNIT_MAP))
+  // Skip 1-letter keys like 'g' and 'l' — they false-match brand names
+  // ("Parle-G", "L'Oreal"). They are still valid via size suffixes ("500g")
+  // which are handled separately by the size-aware regex in the parser.
+  for (const [k, v] of Object.entries(UNIT_MAP)) {
+    if (k.length < 2) continue
     if (new RegExp(`\\b${k}\\b`).test(t)) return v
+  }
   return 'packet'
 }
 
+// Unit-word patterns we strip from the END of a line (so the last number is
+// the price, not the size). Sizes attached to digits like "500g" or "1kg"
+// stay in the name — only space-separated trailing unit words are stripped.
+const TRAILING_UNIT_RE = /\s+(packets?|pkts?|packs?|kgs?|kilograms?|grams?|gms?|litres?|liters?|ltrs?|pcs?|pieces?|nos?|dozens?|doz|boxes?|bars?|bottles?)\s*[.,]?\s*$/i
+
 /**
- * parsePastedCatalog(text)
+ * Parses a free-form pasted blob into product rows.
  *
- * Extracts product rows from a free-form pasted blob (one per line):
+ * Handles all of:
  *   "Parle-G 10"
  *   "Maggi Noodles 14 packet"
- *   "Amul Milk 500ml @ 28"
- *   "Surf Excel 200g, ₹45"
+ *   "Amul Milk 500ml 28"
+ *   "Surf Excel 200g @ ₹45"
+ *   "Tata Salt 1kg, Rs 22"
  *
- * Returns Array<{name, price, unit, category, inStock:true}>
+ * Each row gets name + price + auto-inferred unit + category. Size suffixes
+ * like 500ml / 1kg stay in the name and also drive the unit guess.
  */
 export function parsePastedCatalog(text) {
   if (!text || !text.trim()) return []
   const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean)
   const rows = []
   for (const raw of lines) {
-    // Strip currency markers
-    const clean = raw.replace(/[₹]/g, '').replace(/\b(rs|rupees?)\b/gi, '')
-    // Grab the LAST integer/decimal as price (price is almost always last)
+    // Strip currency markers and stray punctuation around price
+    let clean = raw
+      .replace(/[₹]/g, ' ')
+      .replace(/\b(rs|rupees?|inr|mrp)\b\.?/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    // Pull off any trailing unit word so the last number is the price.
+    let trailingUnit = null
+    const tu = clean.match(TRAILING_UNIT_RE)
+    if (tu) {
+      trailingUnit = tu[1].toLowerCase()
+      clean = clean.slice(0, tu.index).trim()
+    }
+
+    // Last standalone number is the price.
     const m = clean.match(/(.*?)([0-9]+(?:\.[0-9]+)?)\s*$/)
     if (!m) continue
     let name = m[1].replace(/[-:,@]+\s*$/, '').trim()
     const price = parseFloat(m[2])
     if (!name || isNaN(price)) continue
+
+    // Unit: trailing unit word > size suffix in name (500g/1kg) > guess > default
+    const sizeMatch = name.match(/(\d+(?:\.\d+)?)\s*(kg|kgs|g|gm|gms|grams?|ml|litres?|liters?|ltrs?|l)\b/i)
+    const unitFromTrail = trailingUnit ? UNIT_MAP[trailingUnit] || 'packet' : null
+    const unitFromSize  = sizeMatch ? UNIT_MAP[sizeMatch[2].toLowerCase()] || 'packet' : null
+
     rows.push({
       name,
       price,
-      unit: guessUnit(raw),
+      unit: unitFromTrail || unitFromSize || guessUnit(raw),
       category: guessCategory(name),
       inStock: true,
     })
   }
   return rows
+}
+
+/**
+ * Same logic as parsePastedCatalog but for a single line — returns a
+ * partial form blob you can spread into setForm. Used by voice input where
+ * we want every inferable field filled.
+ *
+ *   parseProductLine("add maggi 14 rupees packet")
+ *   → { name: 'maggi', price: 14, unit: 'packet', category: 'Snacks', inStock: true }
+ */
+export function parseProductLine(line) {
+  return parsePastedCatalog(line || '')[0] || null
 }
 
 const NAME_HEADERS  = ['name', 'product', 'item', 'description', 'product name', 'item name', 'particulars', 'goods', 'article']

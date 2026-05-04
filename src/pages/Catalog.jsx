@@ -6,7 +6,7 @@ import { useToast } from '../components/Toast'
 import VoiceButton from '../components/VoiceButton'
 import FileImportModal from '../components/FileImportModal'
 import { parseCatalogCommand } from '../utils/speech'
-import { CATEGORIES as CAT_LIST, parsePastedCatalog } from '../utils/fileImport'
+import { CATEGORIES as CAT_LIST, parsePastedCatalog, parseProductLine, guessCategory, guessUnit } from '../utils/fileImport'
 
 // Tab list (with All prepended)
 const CATEGORIES = ['All', ...CAT_LIST]
@@ -91,9 +91,23 @@ export default function Catalog() {
   async function handleVoiceResult(text) {
     const cmd = parseCatalogCommand(text)
     if (cmd.action === 'add') {
-      setForm(f => ({ ...f, name: cmd.name || '', price: String(cmd.price || ''), inStock: cmd.inStock }))
+      // Voice → infer EVERY field we can: name, price, unit, category, stock.
+      // Strip leading "add"/"naya"/"daalo" verbs before parsing so the line
+      // looks like a normal "name price [unit]" entry the paste parser knows.
+      const cleaned = text.replace(/^\s*(add|new|naya|daalo|dalo|create)\s+/i, '').trim()
+      const inferred = parseProductLine(cleaned)
+      const baseName  = inferred?.name || cmd.name || cleaned
+      setForm(f => ({
+        ...f,
+        name:     baseName,
+        price:    inferred?.price != null ? String(inferred.price)
+                : cmd.price ? String(cmd.price) : f.price,
+        unit:     inferred?.unit  || guessUnit(text)         || f.unit,
+        category: inferred?.category || guessCategory(baseName) || f.category,
+        inStock:  cmd.inStock !== undefined ? cmd.inStock : f.inStock,
+      }))
       setShowAdd(true)
-      toast(`Recognised: ${cmd.name || text}`, 'info')
+      toast(`Recognised: ${baseName}`, 'info')
     } else if (cmd.action === 'setOOS' || cmd.action === 'setStock') {
       const match = products.find(p =>
         p.name.toLowerCase().includes(cmd.name) || (p.aliases || []).some(a => a.toLowerCase().includes(cmd.name))
@@ -103,7 +117,20 @@ export default function Catalog() {
         catch (e) { toast(e.message, 'error') }
       } else { toast('Saamaan nahi mila', 'error') }
     } else {
-      setForm(f => ({ ...f, name: text })); setShowAdd(true)
+      // No command verb detected — still try to parse "name price" + infer.
+      const inferred = parseProductLine(text)
+      if (inferred) {
+        setForm(f => ({
+          ...f,
+          name:     inferred.name,
+          price:    String(inferred.price),
+          unit:     inferred.unit,
+          category: inferred.category,
+        }))
+      } else {
+        setForm(f => ({ ...f, name: text, category: guessCategory(text), unit: guessUnit(text) }))
+      }
+      setShowAdd(true)
     }
   }
 
