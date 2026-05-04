@@ -50,17 +50,14 @@ export default function Dashboard() {
   return (
     <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* Hero: identity */}
-      <div
-        className="relative overflow-hidden px-4 pt-12 pb-8"
-        style={{ background: 'linear-gradient(135deg, #047857 0%, #059669 55%, #10b981 100%)' }}
-      >
-        <div className="absolute -top-10 -right-10 w-52 h-52 rounded-full opacity-[0.12] bg-white" />
-        <div className="absolute bottom-4 -left-8 w-36 h-36 rounded-full opacity-[0.08] bg-white" />
-
+      {/* Hero: identity — emerald with jaali pattern overlay */}
+      <div className="hero-emerald px-4 pt-14 pb-10">
         <div className="relative max-w-lg mx-auto flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-4 ring-2 ring-white/30">
-            <Store size={28} className="text-white" />
+          <div
+            className="w-[72px] h-[72px] rounded-[20px] bg-white/15 backdrop-blur-md flex items-center justify-center mb-4 ring-2 ring-white/30"
+            style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.22)' }}
+          >
+            <Store size={32} className="text-white" />
           </div>
           <button
             onClick={handleEditShopName}

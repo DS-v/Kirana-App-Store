@@ -130,25 +130,22 @@ export default function Customers() {
 
   return (
     <div className="pb-32 min-h-full animate-fade-in">
-      {/* Header — total bakaya is the sole headline (was duplicated in a hero) */}
-      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
-           style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
-        <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto gap-3">
+      {/* Header — Khaata-maroon, ledger-book vibe distinct from other tabs */}
+      <div className="hero-khaata sticky top-0 z-20">
+        <div className="relative px-4 py-4 flex items-center justify-between max-w-lg mx-auto gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Khaata</h1>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight">Khaata</h1>
             {totalDue > 0 ? (
-              // Just the total bakaya — the per-bucket counts already live on
-              // the Sab / Sirf Udhaar Wale filter buttons just below.
-              <p className="text-xs font-bold mt-0.5 text-orange-500 truncate">
+              <p className="text-[11px] font-bold mt-0.5 text-saffron-200 truncate stat-num">
                 ₹{totalDue.toLocaleString('en-IN')} total bakaya
               </p>
             ) : (
-              <p className="text-xs font-bold text-emerald-500 mt-0.5">Hisaab saaf ✓</p>
+              <p className="text-[11px] font-bold text-kirana-100 mt-0.5">Hisaab saaf ✓</p>
             )}
           </div>
           <button
             onClick={() => setShowAdd(!showAdd)}
-            className="btn-primary py-2 px-4 text-sm w-auto flex items-center gap-1.5 flex-shrink-0"
+            className="bg-white/15 backdrop-blur-sm text-white border border-white/25 py-2 px-4 text-sm font-bold rounded-2xl flex items-center gap-1.5 flex-shrink-0 active:scale-95 transition-transform"
           >
             <Plus size={15} /> Naya
           </button>
@@ -261,7 +258,7 @@ export default function Customers() {
           const isEditing = editing?.id === cust.id
 
           return (
-            <div key={cust.id} className="card p-0 overflow-hidden animate-fade-up">
+            <div key={cust.id} className="card p-0 overflow-hidden">
               {/* Compact row */}
               <button
                 onClick={() => { if (!isEditing) setOpenId(open ? null : cust.id) }}

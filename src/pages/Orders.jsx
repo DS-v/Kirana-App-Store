@@ -295,17 +295,19 @@ export default function Orders() {
             <div className="flex items-center bg-zinc-100 rounded-xl p-1 gap-0.5">
               <button
                 onClick={() => setView('list')}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 ${
                   view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400'
                 }`}
+                style={{ minHeight: 36 }}
               >
                 <List size={13} /> List
               </button>
               <button
                 onClick={() => setView('summary')}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 ${
                   view === 'summary' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400'
                 }`}
+                style={{ minHeight: 36 }}
               >
                 <BarChart2 size={13} /> Summary
               </button>
