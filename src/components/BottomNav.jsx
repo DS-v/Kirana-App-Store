@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Package, ShoppingBag, Users } from 'lucide-react'
+import { LayoutDashboard, Package, ShoppingBag, BookOpen } from 'lucide-react'
 import useStore from '../store/useStore'
 
+// Order Book is now the primary tab. Khaata merges customers + udhaar.
+// Saamaan replaces Catalog. Aaj (Today) is the dashboard.
 const tabs = [
-  { to: '/',          icon: LayoutDashboard, label: 'Home' },
-  { to: '/catalog',   icon: Package,         label: 'Catalog' },
-  { to: '/orders',    icon: ShoppingBag,     label: 'Orders' },
-  { to: '/customers', icon: Users,           label: 'People' },
+  { to: '/orders',    icon: ShoppingBag,     label: 'Order Book' },
+  { to: '/customers', icon: BookOpen,        label: 'Khaata' },
+  { to: '/catalog',   icon: Package,         label: 'Saamaan' },
+  { to: '/',          icon: LayoutDashboard, label: 'Aaj' },
 ]
 
 export default function BottomNav() {
