@@ -1,49 +1,53 @@
 import { useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Search, X, Phone, BookOpen, MessageCircle } from 'lucide-react'
+import { Plus, Search, X, Phone, BookOpen, MessageCircle, Edit2, Save } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import { sendUdhaarReminder, sendUdhaarThankYou, waLink } from '../utils/whatsapp'
 
-// Khaata = customers + udhaar combined.
-// Sort: Sabse Bada (largest) / Sabse Purana (oldest) / Naya (recent) / A–Z
-// Filter: only show customers with udhaar by default (the most common need).
+// Sort options. Hinglish for the udhaar-based ones, English for naam-based.
 const SORTS = [
-  { id: 'big',    label: 'Sabse Bada',   tip: 'Highest udhaar first' },
-  { id: 'old',    label: 'Sabse Purana', tip: 'Oldest customer first' },
-  { id: 'recent', label: 'Naya',         tip: 'Recently added first' },
-  { id: 'az',     label: 'A–Z',          tip: 'By name' },
+  { id: 'udhaarDesc', label: 'Udhaar Bada → Chhota' },
+  { id: 'udhaarAsc',  label: 'Udhaar Chhota → Bada' },
+  { id: 'az',         label: 'A → Z' },
+  { id: 'za',         label: 'Z → A' },
 ]
 
-// Color tier for udhaar amount + recency
-function tierFor(udhaar, daysOld) {
+// Color tier strictly by udhaar amount — no hidden "days" logic, easy to reason about.
+//   ₹0       → Hisaab Saaf (green checkmark)
+//   ₹1–499   → 🟢 chhota udhaar
+//   ₹500–999 → 🟡 dhyaan se
+//   ₹1000+   → 🔴 bada udhaar
+function tierFor(udhaar) {
   if (!udhaar || udhaar <= 0) return 'clear'
-  if (udhaar >= 1000 || daysOld >= 30) return 'red'
-  if (udhaar >=  500 || daysOld >= 15) return 'amber'
-  return 'green'
+  if (udhaar < 500)           return 'green'
+  if (udhaar < 1000)          return 'amber'
+  return 'red'
 }
 
 const TIER = {
-  clear: { dot: 'bg-emerald-400',  text: 'text-emerald-600',  bg: 'bg-emerald-50' },
-  green: { dot: 'bg-emerald-400',  text: 'text-emerald-600',  bg: 'bg-emerald-50' },
-  amber: { dot: 'bg-amber-400',    text: 'text-amber-600',    bg: 'bg-amber-50'   },
-  red:   { dot: 'bg-red-500',      text: 'text-red-600',      bg: 'bg-red-50'     },
+  clear: { dot: 'bg-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-100' },
+  green: { dot: 'bg-emerald-500', text: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-100' },
+  amber: { dot: 'bg-amber-500',   text: 'text-amber-600',   bg: 'bg-amber-50',   ring: 'ring-amber-100' },
+  red:   { dot: 'bg-red-500',     text: 'text-red-600',     bg: 'bg-red-50',     ring: 'ring-red-100' },
 }
 
 export default function Customers() {
-  const customers   = useStore(s => s.customers)
-  const orders      = useStore(s => s.orders)
-  const addCustomer = useStore(s => s.addCustomer)
-  const addUdhaar   = useStore(s => s.addUdhaar)
-  const clearUdhaar = useStore(s => s.clearUdhaar)
-  const toast       = useToast()
-  const [params]    = useSearchParams()
+  const customers      = useStore(s => s.customers)
+  const orders         = useStore(s => s.orders)
+  const addCustomer    = useStore(s => s.addCustomer)
+  const updateCustomer = useStore(s => s.updateCustomer)
+  const addUdhaar      = useStore(s => s.addUdhaar)
+  const clearUdhaar    = useStore(s => s.clearUdhaar)
+  const toast          = useToast()
+  const [params]       = useSearchParams()
 
   const [search, setSearch]     = useState('')
-  const [sort, setSort]         = useState('big')
-  const [onlyUdhaar, setOnlyUdhaar] = useState(true)
+  const [sort, setSort]         = useState('udhaarDesc')
+  const [onlyUdhaar, setOnlyUdhaar] = useState(false)
   const [showAdd, setShowAdd]   = useState(params.get('add') === '1')
   const [openId, setOpenId]     = useState(null)
+  const [editing, setEditing]   = useState(null)        // { id, name, phone, notes }
   const [form, setForm]         = useState({ name: '', phone: '', notes: '' })
   const [paidAmt, setPaidAmt]   = useState({})
 
@@ -52,39 +56,21 @@ export default function Customers() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let list = customers.filter(c => {
-      if (onlyUdhaar && (c.udhaar || 0) <= 0) return false
-      if (!q) return true
-      return c.name.toLowerCase().includes(q) || (c.phone || '').includes(q)
-    })
-    const ordersByCust = (cust) => orders.filter(o =>
-      (o.customerPhone && o.customerPhone === cust.phone) ||
-      o.customerName?.toLowerCase() === cust.name.toLowerCase()
-    )
-    const lastOrderDate = (cust) => {
-      const co = ordersByCust(cust)
-      return co.length ? Math.max(...co.map(o => new Date(o.createdAt).getTime())) : 0
-    }
-    switch (sort) {
-      case 'big':    return list.sort((a,b) => (b.udhaar||0) - (a.udhaar||0))
-      case 'old':    return list.sort((a,b) => lastOrderDate(a) - lastOrderDate(b))
-      case 'recent': return list.sort((a,b) => lastOrderDate(b) - lastOrderDate(a))
-      case 'az':     return list.sort((a,b) => a.name.localeCompare(b.name))
-      default:       return list
-    }
-  }, [customers, orders, search, onlyUdhaar, sort])
+    let list = customers.slice()
 
-  function daysSince(ts) {
-    if (!ts) return null
-    return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24))
-  }
-  function lastOrderTs(cust) {
-    const co = orders.filter(o =>
-      (o.customerPhone && o.customerPhone === cust.phone) ||
-      o.customerName?.toLowerCase() === cust.name.toLowerCase()
+    if (onlyUdhaar) list = list.filter(c => (c.udhaar || 0) > 0)
+    if (q) list = list.filter(c =>
+      c.name.toLowerCase().includes(q) || (c.phone || '').includes(q)
     )
-    return co.length ? Math.max(...co.map(o => new Date(o.createdAt).getTime())) : 0
-  }
+
+    switch (sort) {
+      case 'udhaarDesc': list.sort((a,b) => (b.udhaar||0) - (a.udhaar||0)); break
+      case 'udhaarAsc':  list.sort((a,b) => (a.udhaar||0) - (b.udhaar||0)); break
+      case 'az':         list.sort((a,b) => a.name.localeCompare(b.name));   break
+      case 'za':         list.sort((a,b) => b.name.localeCompare(a.name));   break
+    }
+    return list
+  }, [customers, search, onlyUdhaar, sort])
 
   async function addNewCustomer() {
     if (!form.name.trim()) return toast('Naam daalein', 'error')
@@ -92,6 +78,24 @@ export default function Customers() {
     try {
       await addCustomer({ ...form }); toast(`${form.name} jud gaya`, 'success')
       setForm({ name: '', phone: '', notes: '' }); setShowAdd(false)
+    } catch (e) { toast(e.message, 'error') }
+  }
+
+  function startEdit(cust) {
+    setEditing({ id: cust.id, name: cust.name, phone: cust.phone || '', notes: cust.notes || '' })
+  }
+  async function saveEdit() {
+    if (!editing) return
+    if (!editing.name.trim()) return toast('Naam daalein', 'error')
+    if (editing.phone && editing.phone.replace(/\D/g, '').length < 10) return toast('Sahi number daalein', 'error')
+    try {
+      await updateCustomer(editing.id, {
+        name:  editing.name.trim(),
+        phone: editing.phone.replace(/\D/g, ''),
+        notes: editing.notes,
+      })
+      toast('Update ho gaya', 'success')
+      setEditing(null)
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -114,8 +118,7 @@ export default function Customers() {
   }
 
   async function moreUdhaar(cust) {
-    const raw = paidAmt[cust.id]
-    const amt = parseFloat(raw || '')
+    const amt = parseFloat(paidAmt[cust.id] || '')
     if (!amt || amt <= 0) return toast('Amount daalein', 'error')
     try {
       await addUdhaar(cust.id, amt)
@@ -126,8 +129,7 @@ export default function Customers() {
 
   return (
     <div className="pb-32 min-h-full animate-fade-in">
-
-      {/* ── Page header ─────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
            style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
         <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
@@ -152,7 +154,7 @@ export default function Customers() {
 
       <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
 
-      {/* Total bakaya hero — only if there's any */}
+      {/* Total bakaya hero */}
       {totalDue > 0 && (
         <div
           className="rounded-2xl p-4 text-white"
@@ -163,10 +165,19 @@ export default function Customers() {
             ₹{totalDue.toLocaleString('en-IN')}
           </p>
           <p className="text-xs text-orange-100/90 mt-1">
-            {dueCount} customer ka udhaar pending hai
+            {dueCount} customer ka udhaar pending
           </p>
         </div>
       )}
+
+      {/* Color legend — explains the dot tiers */}
+      <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-2.5 text-[11px] text-zinc-500 overflow-x-auto no-scrollbar"
+           style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <span className="font-semibold text-zinc-400 whitespace-nowrap">Rang:</span>
+        <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-emerald-500" /> &lt; ₹500</span>
+        <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-amber-500" /> ₹500–999</span>
+        <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-red-500" /> ₹1000+</span>
+      </div>
 
       {/* Add customer form */}
       {showAdd && (
@@ -191,9 +202,7 @@ export default function Customers() {
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-zinc-500">WhatsApp Number</label>
             <div className="flex gap-2">
-              <div className="flex items-center justify-center bg-zinc-50 border border-zinc-200 rounded-xl px-3 text-zinc-500 text-sm font-semibold w-16 flex-shrink-0">
-                +91
-              </div>
+              <div className="flex items-center justify-center bg-zinc-50 border border-zinc-200 rounded-xl px-3 text-zinc-500 text-sm font-semibold w-16 flex-shrink-0">+91</div>
               <input
                 className="input-field flex-1"
                 type="tel" inputMode="numeric" placeholder="9876543210" maxLength={10}
@@ -211,15 +220,23 @@ export default function Customers() {
         </div>
       )}
 
-      {/* Filter pill — only-udhaar toggle */}
-      <div className="flex gap-2">
+      {/* Filter toggle — now visually obvious which mode is on */}
+      <div className="grid grid-cols-2 gap-2">
         <button
-          onClick={() => setOnlyUdhaar(!onlyUdhaar)}
-          className={`flex-1 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+          onClick={() => setOnlyUdhaar(false)}
+          className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+            !onlyUdhaar ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-500'
+          }`}
+        >
+          Sab Customer ({customers.length})
+        </button>
+        <button
+          onClick={() => setOnlyUdhaar(true)}
+          className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-colors ${
             onlyUdhaar ? 'bg-orange-500 text-white' : 'bg-white border border-zinc-200 text-zinc-500'
           }`}
         >
-          {onlyUdhaar ? 'Sirf Udhaar Wale ▾' : 'Sab Customer ▾'}
+          Sirf Udhaar Wale ({dueCount})
         </button>
       </div>
 
@@ -230,7 +247,6 @@ export default function Customers() {
             key={s.id}
             onClick={() => setSort(s.id)}
             className={`seg-item ${sort === s.id ? 'seg-item-active' : ''}`}
-            title={s.tip}
           >
             {s.label}
           </button>
@@ -253,7 +269,7 @@ export default function Customers() {
             {onlyUdhaar ? 'Kisi ka udhaar nahi hai 🎉' : 'Koi customer nahi hai abhi'}
           </p>
           <p className="text-xs text-zinc-300">
-            {onlyUdhaar ? 'Sab customer dekhne ke liye filter hatao' : 'Naya pe tap karke pehla add karein'}
+            {onlyUdhaar ? '"Sab Customer" pe tap karein' : 'Naya pe tap karke pehla add karein'}
           </p>
         </div>
       )}
@@ -262,30 +278,29 @@ export default function Customers() {
       <div className="space-y-2.5">
         {filtered.map(cust => {
           const udhaar = cust.udhaar || 0
-          const lastTs = lastOrderTs(cust)
-          const days = daysSince(lastTs)
-          const tier = tierFor(udhaar, days || 0)
+          const tier = tierFor(udhaar)
           const T = TIER[tier]
           const open = openId === cust.id
-          const initials = cust.name.split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase()
+          const initials = cust.name.split(/\s+/).slice(0,2).map(s => s[0] || '').join('').toUpperCase()
+          const isEditing = editing?.id === cust.id
 
           return (
             <div key={cust.id} className="card p-0 overflow-hidden animate-fade-up">
-              {/* Compact row — tap to open detail */}
+              {/* Compact row */}
               <button
-                onClick={() => setOpenId(open ? null : cust.id)}
+                onClick={() => { if (!isEditing) setOpenId(open ? null : cust.id) }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 transition-colors"
               >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold ${T.bg} ${T.text}`}>
-                  {initials || cust.name[0].toUpperCase()}
+                <div className="relative flex-shrink-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${T.bg} ${T.text}`}>
+                    {initials || cust.name[0].toUpperCase()}
+                  </div>
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ${T.dot} ring-2 ring-white`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-zinc-900 text-sm truncate">{cust.name}</p>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                  <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
                     {cust.phone ? `+91 ${cust.phone}` : 'Phone nahi'}
-                    {days != null && lastTs > 0 && (
-                      <> · {days === 0 ? 'Aaj' : `${days} din pehle`}</>
-                    )}
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -300,67 +315,93 @@ export default function Customers() {
                 </div>
               </button>
 
-              {/* Inline actions when open */}
+              {/* Inline detail / actions / edit */}
               {open && (
                 <div className="px-4 pb-4 space-y-3 border-t border-zinc-50 bg-zinc-50/40">
-                  <div className="flex items-center gap-2 pt-3">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      className="input-field flex-1 py-2 text-sm"
-                      placeholder="Amount ₹"
-                      value={paidAmt[cust.id] || ''}
-                      onChange={e => setPaidAmt(p => ({ ...p, [cust.id]: e.target.value }))}
-                    />
-                    {udhaar > 0 && (
-                      <button
-                        onClick={() => paisaAaya(cust, false)}
-                        className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold whitespace-nowrap active:scale-95 transition-transform"
-                      >
-                        Paisa Aaya
-                      </button>
-                    )}
-                    <button
-                      onClick={() => moreUdhaar(cust)}
-                      className="px-3 py-2 bg-orange-50 text-orange-600 rounded-xl text-xs font-bold whitespace-nowrap active:scale-95 transition-transform"
-                    >
-                      + Udhaar
-                    </button>
-                  </div>
 
-                  <div className="flex gap-2">
-                    {udhaar > 0 && cust.phone && (
-                      <button
-                        onClick={() => yaadDilao(cust)}
-                        className="flex-1 py-2.5 bg-orange-50 text-orange-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
-                      >
-                        <MessageCircle size={13} /> Yaad Dilao
-                      </button>
-                    )}
-                    {udhaar > 0 && (
-                      <button
-                        onClick={() => paisaAaya(cust, true)}
-                        className="flex-1 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold active:scale-95 transition-transform"
-                      >
-                        Pura ₹{udhaar} aaya
-                      </button>
-                    )}
-                    {cust.phone && udhaar <= 0 && (
-                      <a
-                        href={waLink(cust.phone, `Namaste ${cust.name} ji! 🙏`)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
-                      >
-                        <Phone size={13} /> WhatsApp
-                      </a>
-                    )}
-                  </div>
+                  {/* Edit mode */}
+                  {isEditing ? (
+                    <div className="space-y-2 pt-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase">Naam</label>
+                        <input className="input-field py-2 text-sm" value={editing.name}
+                          onChange={e => setEditing(p => ({ ...p, name: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase">Phone</label>
+                        <input className="input-field py-2 text-sm" type="tel" inputMode="numeric"
+                          maxLength={10} value={editing.phone}
+                          onChange={e => setEditing(p => ({ ...p, phone: e.target.value.replace(/\D/g,'') }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase">Notes</label>
+                        <input className="input-field py-2 text-sm" value={editing.notes}
+                          onChange={e => setEditing(p => ({ ...p, notes: e.target.value }))} />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={saveEdit}
+                          className="flex-1 py-2.5 bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+                          <Save size={13} /> Save
+                        </button>
+                        <button onClick={() => setEditing(null)}
+                          className="px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-600 active:scale-95 transition-transform">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Udhaar input + +/Paisa buttons */}
+                      <div className="flex items-center gap-2 pt-3">
+                        <input
+                          type="number" inputMode="numeric"
+                          className="input-field flex-1 py-2 text-sm" placeholder="Amount ₹"
+                          value={paidAmt[cust.id] || ''}
+                          onChange={e => setPaidAmt(p => ({ ...p, [cust.id]: e.target.value }))}
+                        />
+                        {udhaar > 0 && (
+                          <button onClick={() => paisaAaya(cust, false)}
+                            className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold whitespace-nowrap active:scale-95 transition-transform">
+                            Paisa Aaya
+                          </button>
+                        )}
+                        <button onClick={() => moreUdhaar(cust)}
+                          className="px-3 py-2 bg-orange-50 text-orange-600 rounded-xl text-xs font-bold whitespace-nowrap active:scale-95 transition-transform">
+                          + Udhaar
+                        </button>
+                      </div>
 
-                  {cust.notes && (
-                    <p className="text-xs text-zinc-500 italic bg-white rounded-lg px-3 py-2">
-                      {cust.notes}
-                    </p>
+                      {/* Quick actions */}
+                      <div className="flex gap-2">
+                        {udhaar > 0 && cust.phone && (
+                          <button onClick={() => yaadDilao(cust)}
+                            className="flex-1 py-2.5 bg-orange-50 text-orange-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+                            <MessageCircle size={13} /> Yaad Dilao
+                          </button>
+                        )}
+                        {udhaar > 0 && (
+                          <button onClick={() => paisaAaya(cust, true)}
+                            className="flex-1 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold active:scale-95 transition-transform">
+                            Pura ₹{udhaar} aaya
+                          </button>
+                        )}
+                        {cust.phone && udhaar <= 0 && (
+                          <a href={waLink(cust.phone, `Namaste ${cust.name} ji! 🙏`)} target="_blank" rel="noreferrer"
+                            className="flex-1 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+                            <Phone size={13} /> WhatsApp
+                          </a>
+                        )}
+                        <button onClick={() => startEdit(cust)}
+                          className="px-3 py-2.5 bg-white border border-zinc-200 text-zinc-600 rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 transition-transform"
+                          title="Edit details">
+                          <Edit2 size={13} />
+                        </button>
+                      </div>
+
+                      {cust.notes && (
+                        <p className="text-xs text-zinc-500 italic bg-white rounded-lg px-3 py-2">{cust.notes}</p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -369,7 +410,7 @@ export default function Customers() {
         })}
       </div>
 
-      </div>{/* end page content */}
+      </div>
     </div>
   )
 }

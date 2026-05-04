@@ -181,7 +181,12 @@ export default function Orders() {
     } catch (e) { toast(e.message, 'error') }
   }
 
-  const filtered    = orders.filter(o => filterStatus === 'all' || o.status === filterStatus)
+  // Bucket legacy confirmed/packed into 'pending' for filtering UX
+  const filtered    = orders.filter(o => {
+    if (filterStatus === 'all') return true
+    if (filterStatus === 'pending') return ['pending','confirmed','packed'].includes(o.status)
+    return o.status === filterStatus
+  })
   const today       = new Date().toDateString()
   const todayOrders = filtered.filter(o => new Date(o.createdAt).toDateString() === today)
   const olderOrders = filtered.filter(o => new Date(o.createdAt).toDateString() !== today)
@@ -196,19 +201,18 @@ export default function Orders() {
   const periodOrders = orders.filter(o => new Date(o.createdAt) >= periodStart)
 
   const sumTotal     = periodOrders.length
-  const sumFulfilled = periodOrders.filter(o => ['confirmed','packed','delivered'].includes(o.status)).length
-  const sumPending   = periodOrders.filter(o => o.status === 'pending').length
+  const sumDelivered = periodOrders.filter(o => o.status === 'delivered').length
   const sumCancelled = periodOrders.filter(o => o.status === 'cancelled').length
   const sumCredit    = periodOrders.filter(o => o.status === 'credit').reduce((s,o) => s + (o.total||0), 0)
   const sumCollected = periodOrders
-    .filter(o => ['confirmed','packed','delivered'].includes(o.status))
+    .filter(o => o.status === 'delivered')
     .reduce((s,o) => s + (o.total||0), 0)
   const totalUdhaar  = customers.reduce((s,c) => s + (c.udhaar||0), 0)
   const debtors      = customers.filter(c => c.udhaar > 0)
   const oosItems     = products.filter(p => !p.inStock)
 
-  const PERIOD_LABEL = { day: 'Today', week: 'This Week', month: 'This Month' }
-  const summaryText = `📊 *${PERIOD_LABEL[period]} Summary*\n🏪 ${shopName || 'My Store'}\n\n📦 Orders: ${sumTotal}\n✅ Fulfilled: ${sumFulfilled}\n⏳ Pending: ${sumPending}\n❌ Cancelled: ${sumCancelled}\n💵 Collected: ₹${sumCollected.toLocaleString('en-IN')}\n📋 Credit: ₹${sumCredit.toLocaleString('en-IN')}\n💰 Total Udhaar: ₹${totalUdhaar.toLocaleString('en-IN')}${oosItems.length ? `\n⚠️ OOS: ${oosItems.map(p=>p.name).join(', ')}` : ''}\n\n_Kirana Smart Orders_`
+  const PERIOD_LABEL = { day: 'Aaj', week: 'Is Hafte', month: 'Is Mahine' }
+  const summaryText = `📊 *${PERIOD_LABEL[period]} ka Hisaab*\n🏪 ${shopName || 'My Store'}\n\n📦 Total Orders: ${sumTotal}\n✅ De diya: ${sumDelivered}\n💵 Kamaai: ₹${sumCollected.toLocaleString('en-IN')}\n📋 Udhaar: ₹${sumCredit.toLocaleString('en-IN')}\n💰 Total Bakaya: ₹${totalUdhaar.toLocaleString('en-IN')}${oosItems.length ? `\n⚠️ Khatam: ${oosItems.map(p=>p.name).join(', ')}` : ''}\n\n_Kirana Smart Orders_`
 
   // Path B: incoming message from whatsapp-web.js → pre-fill form
   function handleIncomingOpen(msg) {
@@ -275,7 +279,7 @@ export default function Orders() {
         <div className="space-y-4 animate-fade-in">
           {/* Period selector */}
           <div className="seg-bar">
-            {[['day','Today'],['week','This Week'],['month','This Month']].map(([val,label]) => (
+            {[['day','Aaj'],['week','Hafta'],['month','Mahina']].map(([val,label]) => (
               <button key={val} onClick={() => setPeriod(val)}
                 className={`seg-item ${period === val ? 'seg-item-active' : ''}`}>
                 {label}
@@ -283,92 +287,64 @@ export default function Orders() {
             ))}
           </div>
 
-          {/* Stats grid */}
+          {/* Stats grid — only the 4 things a shopkeeper actually checks */}
           <div className="grid grid-cols-2 gap-3">
-            <SumCard icon={<ShoppingBag size={17}/>} label="Total Orders"  value={sumTotal}                                      sub="for the period"           color="emerald" />
-            <SumCard icon={<TrendingUp size={17}/>}  label="Collected"     value={`₹${sumCollected.toLocaleString('en-IN')}`}    sub="cash received"            color="sky" />
-            <SumCard icon={<Package size={17}/>}     label="Fulfilled"     value={sumFulfilled}                                  sub="orders"                   color="violet" />
-            <SumCard icon={<Users size={17}/>}       label="Credit Issued" value={`₹${sumCredit.toLocaleString('en-IN')}`}       sub={`${periodOrders.filter(o=>o.status==='credit').length} orders`} color="orange" />
-            <SumCard icon={<Clock size={17}/>}       label="Pending"       value={sumPending}                                    sub="orders"                   color="amber" />
-            <SumCard icon={<XCircle size={17}/>}     label="Cancelled"     value={sumCancelled}                                  sub="orders"                   color="zinc" />
+            <SumCard icon={<ShoppingBag size={17}/>} label="Total Orders" value={sumTotal}                                   sub={`${sumDelivered} de diya`}                              color="emerald" />
+            <SumCard icon={<TrendingUp size={17}/>}  label="Kamaai"       value={`₹${sumCollected.toLocaleString('en-IN')}`} sub="cash + UPI"                                              color="sky" />
+            <SumCard icon={<Users size={17}/>}       label="Udhaar"       value={`₹${sumCredit.toLocaleString('en-IN')}`}    sub={`${periodOrders.filter(o=>o.status==='credit').length} orders`} color="orange" />
+            <SumCard icon={<XCircle size={17}/>}     label="Cancel"       value={sumCancelled}                               sub="orders"                                                  color="zinc" />
           </div>
 
-          {/* Udhaar overview */}
+          {/* Top bakaya customers */}
           {debtors.length > 0 && (
             <div className="card space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
                   <Users size={14} className="text-orange-500" />
                 </div>
-                <p className="font-bold text-zinc-900 text-sm flex-1">Udhaar Outstanding</p>
+                <p className="font-bold text-zinc-900 text-sm flex-1">Bakaya Customers</p>
                 <span className="font-bold text-orange-500">₹{totalUdhaar.toLocaleString('en-IN')}</span>
               </div>
               <div className="divide-y divide-zinc-50">
-                {debtors.slice(0,5).map(c => (
+                {debtors.sort((a,b)=>(b.udhaar||0)-(a.udhaar||0)).slice(0,5).map(c => (
                   <div key={c.id} className="flex justify-between text-sm py-2">
-                    <span className="text-zinc-600">{c.name}</span>
-                    <span className="font-semibold text-zinc-900">₹{c.udhaar}</span>
+                    <span className="text-zinc-600 truncate pr-2">{c.name}</span>
+                    <span className="font-semibold text-zinc-900 flex-shrink-0">₹{c.udhaar}</span>
                   </div>
                 ))}
                 {debtors.length > 5 && (
-                  <p className="text-xs text-zinc-400 pt-2">+{debtors.length - 5} more customers</p>
+                  <p className="text-xs text-zinc-400 pt-2">+{debtors.length - 5} aur</p>
                 )}
               </div>
             </div>
           )}
 
-          {/* Out of stock */}
+          {/* Khatam items */}
           {oosItems.length > 0 && (
             <div className="card space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
                   <AlertTriangle size={14} className="text-red-500" />
                 </div>
-                <p className="font-bold text-zinc-900 text-sm flex-1">Out of Stock</p>
-                <span className="text-xs font-bold text-red-500">{oosItems.length} items</span>
+                <p className="font-bold text-zinc-900 text-sm flex-1">Khatam Saamaan</p>
+                <span className="text-xs font-bold text-red-500">{oosItems.length}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {oosItems.map(p => (
+                {oosItems.slice(0, 12).map(p => (
                   <span key={p.id} className="px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium">{p.name}</span>
                 ))}
+                {oosItems.length > 12 && (
+                  <span className="px-2.5 py-1 text-xs text-zinc-400">+{oosItems.length - 12} aur</span>
+                )}
               </div>
             </div>
           )}
 
-          {/* Order breakdown for period */}
-          {periodOrders.length > 0 && (
-            <div className="card p-0 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-50">
-                <ShoppingBag size={14} className="text-zinc-400" />
-                <p className="font-bold text-zinc-900 text-sm">{PERIOD_LABEL[period]} Orders</p>
-                <span className="ml-auto text-xs text-zinc-400">{periodOrders.length} total</span>
-              </div>
-              <div className="divide-y divide-zinc-50/80 max-h-64 overflow-y-auto no-scrollbar">
-                {periodOrders.map(o => (
-                  <div key={o.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-zinc-800 truncate">{o.customerName || 'Customer'}</p>
-                      <p className="text-xs text-zinc-400">{format(new Date(o.createdAt), 'd MMM, h:mm a')}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-sm font-bold text-zinc-900 tabular-nums">₹{o.total || 0}</span>
-                      <span className={STATUS_COLOR[o.status] || 'badge bg-zinc-100 text-zinc-500'}>{STATUS_LABEL[o.status]}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Summary preview + share */}
-          <div className="card space-y-3">
-            <p className="section-label">Summary Preview</p>
-            <pre className="text-xs text-zinc-600 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
-          </div>
+          {/* Share buttons */}
           <div className="space-y-2">
             <WAButton
-              href={sendEndOfDaySummary(ownerPhone, { date: PERIOD_LABEL[period], totalOrders: sumTotal, fulfilled: sumFulfilled, missed: sumCancelled, collected: sumCollected, credit: sumCredit, stockAlerts: oosItems.map(p=>p.name) })}
-              label={`Share ${PERIOD_LABEL[period]} Summary`}
+              href={sendEndOfDaySummary(ownerPhone, { date: PERIOD_LABEL[period], totalOrders: sumTotal, fulfilled: sumDelivered, missed: sumCancelled, collected: sumCollected, credit: sumCredit, stockAlerts: oosItems.map(p=>p.name) })}
+              label={`${PERIOD_LABEL[period]} ka Hisaab share karein`}
               size="md"
               block
             />
@@ -376,14 +352,14 @@ export default function Orders() {
               onClick={() => navigator.clipboard?.writeText(summaryText).then(() => alert('Copied!')).catch(() => {})}
               className="btn-secondary flex items-center justify-center gap-2"
             >
-              <Share2 size={16} /> Copy Summary
+              <Share2 size={16} /> Copy karein
             </button>
           </div>
 
           {sumTotal === 0 && (
             <div className="empty-state">
               <div className="empty-state-icon"><BarChart2 size={28} className="text-zinc-300" /></div>
-              <p className="text-sm font-semibold text-zinc-400">No orders {PERIOD_LABEL[period].toLowerCase()}</p>
+              <p className="text-sm font-semibold text-zinc-400">{PERIOD_LABEL[period]} koi order nahi</p>
             </div>
           )}
         </div>
@@ -621,9 +597,7 @@ function OrderGroup({ label, orders, expandedId, setExpandedId, updateOrder, del
 
 // Color of the "next status" pill shown under the swipe-right hint
 const NEXT_STATUS_COLOR = {
-  confirmed: 'emerald',
-  packed:    'sky',
-  delivered: 'violet',
+  delivered: 'emerald',
 }
 
 function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast }) {
