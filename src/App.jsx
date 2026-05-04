@@ -105,19 +105,35 @@ export default function App() {
       if (!cancelled) setBooting(false)
     }, 3000)
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (cancelled) return
       if (session && !token) {
         const phone        = session.user.phone || ''
         const fromMetadata = session.user.user_metadata?.shop_name
         const fromStorage  = localStorage.getItem('kirana_shop_name')
-        const name         = fromMetadata || fromStorage || ''
+        let name           = fromMetadata || fromStorage || ''
+
+        // Last-resort fallback: fetch from backend (covers accounts that were
+        // created before user_metadata persistence and are now signing in
+        // from a fresh incognito / different device with no localStorage).
+        if (!name) {
+          try {
+            // Stage the token so api.get() can authenticate.
+            localStorage.setItem('kirana_token', session.access_token)
+            const { api } = await import('./api/client.js')
+            const shop = await api.get('/api/shops')
+            if (shop?.name) name = shop.name
+          } catch {
+            localStorage.removeItem('kirana_token')
+          }
+        }
+
+        if (cancelled) return
         if (name) {
           setAuth({ token: session.access_token, shopId: session.user.id, shopName: name, phone })
-          // Backfill user_metadata for existing users whose name only lives in
-          // localStorage — so they don't get re-prompted on a different device/incognito.
-          if (!fromMetadata && fromStorage) {
-            supabase.auth.updateUser({ data: { shop_name: fromStorage } }).catch(() => {})
+          // Backfill user_metadata so this round-trip isn't needed next time.
+          if (!fromMetadata) {
+            supabase.auth.updateUser({ data: { shop_name: name } }).catch(() => {})
           }
         }
       }
