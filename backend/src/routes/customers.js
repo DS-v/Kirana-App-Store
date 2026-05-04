@@ -6,14 +6,22 @@ const router = Router()
 router.use(requireAuth)
 
 router.get('/', async (req, res) => {
-  // Override Supabase REST default 1000-row cap (.range covers up to 100k rows).
-  const { data, error } = await db.from('customers')
-    .select('*')
-    .eq('shop_id', req.userId)
-    .order('name')
-    .range(0, 99999)
-  if (error) return res.status(500).json({ error: error.message })
-  res.json(data)
+  // Page in 1000-row chunks — .range alone gets silently capped on some
+  // Supabase plans. Loop until we get a short page.
+  const PAGE = 1000
+  const all = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db.from('customers')
+      .select('*')
+      .eq('shop_id', req.userId)
+      .order('name')
+      .range(from, from + PAGE - 1)
+    if (error) return res.status(500).json({ error: error.message })
+    if (!data?.length) break
+    all.push(...data)
+    if (data.length < PAGE || all.length > 50000) break
+  }
+  res.json(all)
 })
 
 router.post('/', async (req, res) => {

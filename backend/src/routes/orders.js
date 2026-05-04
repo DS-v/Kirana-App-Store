@@ -7,21 +7,28 @@ router.use(requireAuth)
 
 // GET /api/orders?date=2026-05-03
 router.get('/', async (req, res) => {
-  // Override Supabase REST default 1000-row cap.
-  let query = db.from('orders')
-    .select('*, order_items(*)')
-    .eq('shop_id', req.userId)
-    .order('created_at', { ascending: false })
-    .range(0, 99999)
+  // Page in 1000-row chunks — Supabase silently caps single .range() calls.
+  const PAGE = 1000
+  const dateStart = req.query.date ? new Date(req.query.date) : null
+  const dateEnd   = req.query.date ? new Date(new Date(req.query.date).setDate(dateStart.getDate() + 1)) : null
 
-  if (req.query.date) {
-    const start = new Date(req.query.date)
-    const end = new Date(req.query.date)
-    end.setDate(end.getDate() + 1)
-    query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString())
+  const all = []
+  let error = null
+  for (let from = 0; ; from += PAGE) {
+    let q = db.from('orders')
+      .select('*, order_items(*)')
+      .eq('shop_id', req.userId)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE - 1)
+    if (dateStart) q = q.gte('created_at', dateStart.toISOString()).lt('created_at', dateEnd.toISOString())
+    const { data: chunk, error: chunkErr } = await q
+    if (chunkErr) { error = chunkErr; break }
+    if (!chunk?.length) break
+    all.push(...chunk)
+    if (chunk.length < PAGE || all.length > 50000) break
   }
 
-  const { data, error } = await query
+  const data = all
   if (error) return res.status(500).json({ error: error.message })
 
   // Reshape: attach items array and map snake_case → camelCase for frontend
