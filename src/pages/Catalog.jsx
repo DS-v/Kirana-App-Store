@@ -5,6 +5,7 @@ import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import VoiceButton from '../components/VoiceButton'
 import FileImportModal from '../components/FileImportModal'
+import BottomSheet from '../components/BottomSheet'
 import { parseCatalogCommand } from '../utils/speech'
 import { CATEGORIES as CAT_LIST, parsePastedCatalog, parseProductLine, guessCategory, guessUnit } from '../utils/fileImport'
 import { aiParseCatalog } from '../api/client'
@@ -295,25 +296,17 @@ export default function Catalog() {
           </div>
         )}
 
-        {/* Add / Edit form */}
-        {(showAdd || editId) && (
-          <div className="card-elevated space-y-4 animate-slide-up">
-            <div className="flex items-center justify-between">
-              <p className="font-bold text-zinc-900 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-sky-50 flex items-center justify-center">
-                  <Package size={14} className="text-sky-600" />
-                </span>
-                {editId ? 'Edit Saamaan' : 'Naya Saamaan'}
-              </p>
-              <button onClick={() => { setShowAdd(false); setEditId(null) }} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-
+        {/* Add / Edit form is now a bottom sheet — reachable from any scroll position */}
+        <BottomSheet
+          open={showAdd || !!editId}
+          onClose={() => { setShowAdd(false); setEditId(null) }}
+          title={editId ? 'Edit Saamaan' : 'Naya Saamaan'}
+        >
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-500">Naam *</label>
               <input className="input-field" placeholder="e.g. Parle-G" value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} autoFocus />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -353,7 +346,7 @@ export default function Catalog() {
               {form.inStock ? 'Stock me' : 'Khatam'}
             </button>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-2 sticky bottom-0 bg-white pb-1">
               <button onClick={saveProduct} className="btn-primary py-3 text-sm flex-1">
                 {editId ? 'Save changes' : 'Catalog me add karein'}
               </button>
@@ -378,7 +371,7 @@ export default function Catalog() {
               )}
             </div>
           </div>
-        )}
+        </BottomSheet>
 
         {/* Search */}
         <div className="relative">
