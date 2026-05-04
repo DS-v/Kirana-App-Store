@@ -5,12 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   server: {
     port: parseInt(process.env.PORT || '5173'),
-    allowedHosts: 'all',
+    allowedHosts: true,
   },
   preview: {
     port: parseInt(process.env.PORT || '4173'),
     host: true,
-    allowedHosts: 'all',   // allows Railway domains (*.up.railway.app) and any custom domain
+    allowedHosts: true,
   },
   plugins: [
     react(),
