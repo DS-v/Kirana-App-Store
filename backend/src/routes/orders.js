@@ -7,10 +7,12 @@ router.use(requireAuth)
 
 // GET /api/orders?date=2026-05-03
 router.get('/', async (req, res) => {
+  // Override Supabase REST default 1000-row cap.
   let query = db.from('orders')
     .select('*, order_items(*)')
     .eq('shop_id', req.userId)
     .order('created_at', { ascending: false })
+    .range(0, 99999)
 
   if (req.query.date) {
     const start = new Date(req.query.date)

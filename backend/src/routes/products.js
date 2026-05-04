@@ -16,11 +16,16 @@ function inferCategory(name) {
 }
 
 // GET /api/products
+// NOTE: Supabase REST silently caps at 1000 rows by default. We override with
+// .range(0, 99999) to support large catalogs (kirana shopkeepers regularly
+// have 1k–5k SKUs after a paste/PDF import). If you ever exceed ~10k SKUs on
+// one shop, switch to true pagination (?cursor= or ?page=).
 router.get('/', async (req, res) => {
   const { data, error } = await db.from('products')
     .select('*')
     .eq('shop_id', req.userId)
     .order('name')
+    .range(0, 99999)
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
 })
