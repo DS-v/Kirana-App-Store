@@ -8,6 +8,8 @@ import VoiceButton from '../components/VoiceButton'
 import IncomingMessageBanner from '../components/IncomingMessageBanner'
 import ImageOrderScanner from '../components/ImageOrderScanner'
 import { parseOrderMessage, orderTotal } from '../utils/orderParser'
+import { STATUSES, STATUS_LABEL, STATUS_BADGE, STATUS_COLOR, STATUS_DOT, nextStatusOf, statusAdvanceToast } from '../utils/orderStatus'
+import SwipeableRow from '../components/SwipeableRow'
 import supabase from '../lib/supabase'
 import { format, startOfWeek, startOfMonth } from 'date-fns'
 import {
@@ -19,19 +21,7 @@ import {
   sendEndOfDaySummary,
 } from '../utils/whatsapp'
 
-const STATUSES = ['pending', 'confirmed', 'packed', 'delivered', 'credit', 'cancelled']
-const STATUS_LABEL = {
-  pending: 'Pending', confirmed: 'Confirmed', packed: 'Packed',
-  delivered: 'Delivered', credit: 'Credit', cancelled: 'Cancelled',
-}
-const STATUS_COLOR = {
-  pending: 'status-pending', confirmed: 'status-confirmed', packed: 'status-packed',
-  delivered: 'status-delivered', credit: 'status-credit', cancelled: 'status-cancelled',
-}
-const STATUS_DOT = {
-  confirmed: 'bg-emerald-400', pending: 'bg-amber-400', packed: 'bg-sky-400',
-  delivered: 'bg-violet-400', credit: 'bg-orange-400', cancelled: 'bg-zinc-300',
-}
+// Status labels/colors moved to ../utils/orderStatus.js (single source of truth)
 
 // Statuses that trigger a customer notification prompt
 const NOTIFY_ON_STATUS = {
@@ -247,7 +237,7 @@ export default function Orders() {
       <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
            style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
         <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
-          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Orders</h1>
+          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Order Book</h1>
           <div className="flex items-center gap-2">
             {/* List / Summary toggle */}
             <div className="flex items-center bg-zinc-100 rounded-xl p-1 gap-0.5">
@@ -272,7 +262,7 @@ export default function Orders() {
               onClick={() => { setShowNew(!showNew); if (view === 'summary') setView('list') }}
               className="btn-primary py-2 px-3.5 text-sm w-auto flex items-center gap-1.5"
             >
-              <Plus size={15} /> New
+              <Plus size={15} /> Naya Order
             </button>
           </div>
         </div>
@@ -413,7 +403,7 @@ export default function Orders() {
               <span className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
                 <MessageSquare size={14} className="text-emerald-600" />
               </span>
-              New Order
+              Naya Order
             </p>
             <button onClick={() => setShowNew(false)} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
               <X size={16} />
@@ -584,18 +574,19 @@ export default function Orders() {
           <div className="empty-state-icon">
             <ShoppingBag size={28} strokeWidth={1.4} className="text-zinc-300" />
           </div>
-          <p className="text-sm font-semibold text-zinc-400">No orders yet</p>
-          <p className="text-xs text-zinc-300">Tap New to add your first order</p>
+          <p className="text-sm font-semibold text-zinc-400">Koi order nahi hai abhi</p>
+          <p className="text-xs text-zinc-300">Naya Order pe tap karke pehla order add karein</p>
+          <p className="text-[11px] text-zinc-300 mt-3">💡 Order card ko right swipe karein status badhaane ke liye</p>
         </div>
       )}
 
       <div className="space-y-4">
         {todayOrders.length > 0 && (
-          <OrderGroup label="Today" orders={todayOrders} expandedId={expandedId}
+          <OrderGroup label="Aaj" orders={todayOrders} expandedId={expandedId}
             setExpandedId={setExpandedId} updateOrder={updateOrder} deleteOrder={deleteOrder} toast={toast} />
         )}
         {olderOrders.length > 0 && (
-          <OrderGroup label="Earlier" orders={olderOrders} expandedId={expandedId}
+          <OrderGroup label="Pichhle" orders={olderOrders} expandedId={expandedId}
             setExpandedId={setExpandedId} updateOrder={updateOrder} deleteOrder={deleteOrder} toast={toast} />
         )}
       </div>
@@ -628,6 +619,13 @@ function OrderGroup({ label, orders, expandedId, setExpandedId, updateOrder, del
   )
 }
 
+// Color of the "next status" pill shown under the swipe-right hint
+const NEXT_STATUS_COLOR = {
+  confirmed: 'emerald',
+  packed:    'sky',
+  delivered: 'violet',
+}
+
 function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast }) {
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [notifyLink, setNotifyLink]             = useState(null)
@@ -636,7 +634,7 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
   function changeStatus(status) {
     updateOrder(order.id, { status })
     setShowStatusPicker(false)
-    toast(`Marked as ${STATUS_LABEL[status]}`, 'success')
+    toast(statusAdvanceToast(order.status, status) || `Status: ${STATUS_LABEL[status]}`, 'success')
 
     // Offer customer notification for packed / delivered
     if (order.customerPhone && NOTIFY_ON_STATUS[status]) {
@@ -648,8 +646,16 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
   }
 
   const time = new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  const next = nextStatusOf(order.status)
+  const canSwipeUdhaar = order.status !== 'credit' && order.status !== 'cancelled' && order.status !== 'delivered'
 
   return (
+    <SwipeableRow
+      onSwipeRight={next ? () => changeStatus(next) : undefined}
+      onSwipeLeft={canSwipeUdhaar ? () => changeStatus('credit') : undefined}
+      rightAction={next ? { label: `→ ${STATUS_LABEL[next]}`, color: NEXT_STATUS_COLOR[next] || 'emerald' } : null}
+      leftAction={canSwipeUdhaar ? { label: 'Udhaar', color: 'orange' } : null}
+    >
     <div className="px-4 py-3.5 space-y-3">
       {/* Row */}
       <div className="flex items-start gap-3">
@@ -747,6 +753,7 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
         </div>
       )}
     </div>
+    </SwipeableRow>
   )
 }
 

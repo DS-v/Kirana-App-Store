@@ -75,15 +75,15 @@ export default function Dashboard() {
               </button>
               <p className="text-emerald-200/80 text-xs mt-1 font-medium">
                 {todayOrders.length === 0
-                  ? 'No orders today yet'
-                  : `${todayOrders.length} order${todayOrders.length !== 1 ? 's' : ''} today`}
+                  ? 'Aaj abhi koi order nahi'
+                  : `${todayOrders.length} order aaj`}
               </p>
             </div>
             <button
               onClick={logout}
               className="flex items-center gap-1.5 text-xs font-semibold text-emerald-100 bg-white/15 hover:bg-white/25 active:bg-white/10 px-3 py-2 rounded-xl transition-colors backdrop-blur-sm"
             >
-              <LogOut size={12} /> Sign out
+              <LogOut size={12} /> Logout
             </button>
           </div>
         </div>
@@ -94,35 +94,35 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3">
           <StatCard
             icon={<ShoppingBag size={17} />}
-            label="Today's Orders"
+            label="Aaj ke Order"
             value={todayOrders.length}
-            sub={pending.length > 0 ? `${pending.length} pending` : '✓ all clear'}
+            sub={pending.length > 0 ? `${pending.length} bakaya` : '✓ sab clear'}
             gradient="from-emerald-500 to-emerald-600"
             iconBg="bg-emerald-500/10 text-emerald-600"
             onClick={() => nav('/orders')}
           />
           <StatCard
             icon={<TrendingUp size={17} />}
-            label="Revenue"
+            label="Aaj ki Kamaai"
             value={`₹${revenue.toLocaleString('en-IN')}`}
-            sub="collected today"
+            sub="aaj milaa"
             gradient="from-sky-500 to-sky-600"
             iconBg="bg-sky-500/10 text-sky-600"
           />
           <StatCard
             icon={<Users size={17} />}
-            label="Udhaar Due"
+            label="Total Bakaya"
             value={`₹${creditDue.toLocaleString('en-IN')}`}
-            sub={creditCount > 0 ? `${creditCount} customer${creditCount !== 1 ? 's' : ''}` : 'nobody owes'}
+            sub={creditCount > 0 ? `${creditCount} customer ka udhaar` : 'kisi ka nahi'}
             gradient="from-orange-500 to-orange-600"
             iconBg="bg-orange-500/10 text-orange-600"
             onClick={() => nav('/customers')}
           />
           <StatCard
             icon={<Package size={17} />}
-            label="Out of Stock"
+            label="Khatam"
             value={oosCount}
-            sub={oosCount === 0 ? '✓ fully stocked' : `${oosCount} items low`}
+            sub={oosCount === 0 ? '✓ sab stock me' : `${oosCount} item khatam`}
             gradient={oosCount > 0 ? 'from-red-500 to-rose-500' : 'from-zinc-400 to-zinc-500'}
             iconBg={oosCount > 0 ? 'bg-red-500/10 text-red-600' : 'bg-zinc-500/10 text-zinc-500'}
             onClick={() => nav('/catalog')}
@@ -145,8 +145,8 @@ export default function Dashboard() {
               <AlertTriangle size={16} className="text-amber-600" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-amber-900">{oosCount} items out of stock</p>
-              <p className="text-xs text-amber-600 mt-0.5">Tap to mark as restocked</p>
+              <p className="text-sm font-bold text-amber-900">{oosCount} saamaan khatam</p>
+              <p className="text-xs text-amber-600 mt-0.5">Restock karne ke liye tap karein</p>
             </div>
             <ChevronRight size={15} className="text-amber-400" />
           </button>
@@ -154,12 +154,12 @@ export default function Dashboard() {
 
         {/* Quick Actions */}
         <div className="space-y-2">
-          <p className="section-label px-1">Quick Actions</p>
+          <p className="section-label px-1">Jaldi Actions</p>
           <div className="card p-0 overflow-hidden divide-y divide-zinc-50/80">
             {[
-              { emoji: '💬', label: 'New Order',     sub: 'Voice, image or paste message',  path: '/orders?new=1',   color: 'bg-emerald-50' },
-              { emoji: '📦', label: 'Add Product',   sub: 'Voice, photo or type',            path: '/catalog?add=1',  color: 'bg-sky-50' },
-              { emoji: '📋', label: 'Record Udhaar', sub: "Track a customer's credit",        path: '/customers?add=1',color: 'bg-orange-50' },
+              { emoji: '💬', label: 'Naya Order',    sub: 'Voice, image ya WhatsApp paste',  path: '/orders?new=1',   color: 'bg-emerald-50' },
+              { emoji: '📦', label: 'Naya Saamaan',  sub: 'Voice, photo ya likhein',         path: '/catalog?add=1',  color: 'bg-sky-50' },
+              { emoji: '📋', label: 'Udhaar Khaata', sub: 'Bakaya dekhein, Yaad Dilao',      path: '/customers',      color: 'bg-orange-50' },
             ].map(({ emoji, label, sub, path, color }) => (
               <button
                 key={path}
@@ -189,12 +189,12 @@ export default function Dashboard() {
         {todayOrders.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
-              <p className="section-label">Today's Orders</p>
+              <p className="section-label">Aaj ke Orders</p>
               <button
                 onClick={() => nav('/orders')}
                 className="text-xs text-emerald-600 font-bold flex items-center gap-1 hover:text-emerald-700 transition-colors"
               >
-                See all <ChevronRight size={12} />
+                Sab dekhein <ChevronRight size={12} />
               </button>
             </div>
             <div className="card p-0 overflow-hidden divide-y divide-zinc-50/80">
@@ -224,8 +224,8 @@ export default function Dashboard() {
             <div className="empty-state-icon">
               <Zap size={28} className="text-zinc-300" />
             </div>
-            <p className="text-sm font-semibold text-zinc-400">No orders yet today</p>
-            <p className="text-xs text-zinc-300 max-w-[180px]">Tap New Order to get started</p>
+            <p className="text-sm font-semibold text-zinc-400">Aaj abhi koi order nahi</p>
+            <p className="text-xs text-zinc-300 max-w-[200px]">Naya Order pe tap karein shuruaat ke liye</p>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Search, X, Package, Edit2, Trash2, ToggleLeft, ToggleRight, Upload } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -104,7 +104,7 @@ export default function Catalog() {
       <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
            style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
         <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
-          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Catalog</h1>
+          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Saamaan</h1>
           <div className="flex gap-1.5">
             <button
               onClick={() => setShowPaste(!showPaste)}
@@ -124,7 +124,7 @@ export default function Catalog() {
               onClick={() => { setShowAdd(!showAdd); setEditId(null) }}
               className="btn-primary py-2 px-3.5 text-xs w-auto flex items-center gap-1"
             >
-              <Plus size={14} /> Add
+              <Plus size={14} /> Naya
             </button>
           </div>
         </div>
@@ -250,19 +250,20 @@ export default function Catalog() {
         />
       )}
 
-      {/* Product list */}
+      {/* Product grid */}
       {filtered.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">
             <Package size={28} strokeWidth={1.4} className="text-zinc-300" />
           </div>
-          <p className="text-sm font-semibold text-zinc-400">No products found</p>
-          <p className="text-xs text-zinc-300">Add your first product above</p>
+          <p className="text-sm font-semibold text-zinc-400">Koi saamaan nahi mila</p>
+          <p className="text-xs text-zinc-300">Upar Add pe tap karke pehla item daalein</p>
+          <p className="text-[11px] text-zinc-300 mt-3">💡 Tile pe stock dot tap karke turant in/out toggle karein</p>
         </div>
       ) : (
-        <div className="card p-0 overflow-hidden divide-y divide-zinc-50/80">
+        <div className="grid grid-cols-2 gap-2.5">
           {filtered.map(p => (
-            <ProductRow
+            <ProductTile
               key={p.id}
               product={p}
               onEdit={() => { setEditId(p.id); setShowAdd(false) }}
@@ -281,27 +282,77 @@ export default function Catalog() {
   )
 }
 
-function ProductRow({ product, onEdit, onDelete, onToggle }) {
+// Tile-style product card. Tap stock dot → instant toggle. Tap card → edit.
+// Long-press → quick action menu (delete).
+function ProductTile({ product, onEdit, onDelete, onToggle }) {
+  const longPressTimer = useRef(null)
+  const [showMenu, setShowMenu] = useState(false)
+
+  function handlePressStart() {
+    longPressTimer.current = setTimeout(() => setShowMenu(true), 500)
+  }
+  function handlePressEnd() {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+  }
+
   return (
-    <div className={`flex items-center gap-3 px-4 py-3.5 ${!product.inStock ? 'opacity-50' : ''}`}>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-semibold text-zinc-800 text-sm truncate">{product.name}</p>
-          {!product.inStock && <span className="badge bg-red-50 text-red-500 flex-shrink-0">OOS</span>}
-        </div>
-        <p className="text-xs text-zinc-400 mt-0.5">₹{product.price} / {product.unit} · {product.category}</p>
+    <div
+      className={`relative card p-3 flex flex-col justify-between gap-2 min-h-[110px] transition-opacity ${
+        !product.inStock ? 'opacity-60' : ''
+      }`}
+      onMouseDown={handlePressStart}
+      onMouseUp={handlePressEnd}
+      onMouseLeave={handlePressEnd}
+      onTouchStart={handlePressStart}
+      onTouchEnd={handlePressEnd}
+    >
+      {/* Stock dot — top right, tap to toggle */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggle() }}
+        className={`absolute top-2.5 right-2.5 w-3.5 h-3.5 rounded-full transition-colors ${
+          product.inStock ? 'bg-emerald-500 ring-4 ring-emerald-100' : 'bg-red-400 ring-4 ring-red-100'
+        }`}
+        title={product.inStock ? 'Stock me — tap to mark Khatam' : 'Khatam — tap to mark Stock me'}
+      />
+
+      <div className="pr-6 cursor-pointer" onClick={onEdit}>
+        <p className="font-bold text-zinc-900 text-sm leading-tight line-clamp-2">{product.name}</p>
+        <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider mt-1">{product.category}</p>
       </div>
-      <div className="flex items-center gap-0.5 flex-shrink-0">
-        <button onClick={onToggle} className="w-9 h-9 flex items-center justify-center rounded-xl text-zinc-400 hover:text-emerald-500 transition-colors">
-          {product.inStock ? <ToggleRight size={22} className="text-emerald-500" /> : <ToggleLeft size={22} />}
-        </button>
-        <button onClick={onEdit} className="w-9 h-9 flex items-center justify-center rounded-xl text-zinc-400 hover:text-sky-500 transition-colors">
-          <Edit2 size={15} />
-        </button>
-        <button onClick={onDelete} className="w-9 h-9 flex items-center justify-center rounded-xl text-zinc-400 hover:text-red-500 transition-colors">
-          <Trash2 size={15} />
-        </button>
+
+      <div className="flex items-end justify-between">
+        <p className="text-base font-extrabold text-zinc-900 tabular-nums">
+          ₹{product.price}
+          <span className="text-[10px] text-zinc-400 font-medium ml-1">/ {product.unit}</span>
+        </p>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+          product.inStock ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+        }`}>
+          {product.inStock ? 'Stock me' : 'Khatam'}
+        </span>
       </div>
+
+      {/* Long-press menu */}
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
+          <div className="absolute top-2 right-2 z-40 bg-white rounded-xl py-1.5 min-w-[120px]"
+               style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08)' }}>
+            <button
+              onClick={() => { setShowMenu(false); onEdit() }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+            >
+              <Edit2 size={13} /> Edit
+            </button>
+            <button
+              onClick={() => { setShowMenu(false); onDelete() }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
