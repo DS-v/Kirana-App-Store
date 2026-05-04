@@ -552,8 +552,18 @@ export default function Orders() {
                         unit:        product.unit,
                         price:       product.price,
                         inStock:     true,
+                        sourceLine:  u.originalLine,
                       }])
                       setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                      // Record the line→product mapping so the parser
+                      // recognises it next time without an LLM call.
+                      try {
+                        const { api } = await import('../api/client.js')
+                        api.post('/api/corrections', {
+                          rawLine:   u.originalLine,
+                          productId: product.id,
+                        }).catch(() => {})
+                      } catch {}
                       toast(`${product.name} catalog me jud gaya`, 'success')
                     } catch (e) { toast(e.message, 'error') }
                   }}
@@ -626,6 +636,14 @@ export default function Orders() {
         products={products}
         onSwap={newItem => {
           setParsedItems(p => p.map((it, i) => i === swapTarget.idx ? newItem : it))
+          // Record the correction so future parses skip the LLM for this line.
+          if (swapTarget?.item?.sourceLine && newItem.productId) {
+            import('../api/client.js').then(({ api }) =>
+              api.post('/api/corrections', {
+                rawLine:   swapTarget.item.sourceLine,
+                productId: newItem.productId,
+              }).catch(() => {/* non-fatal */}))
+          }
           setSwapTarget(null)
           toast(`Swapped to ${newItem.productName}`, 'success')
         }}
