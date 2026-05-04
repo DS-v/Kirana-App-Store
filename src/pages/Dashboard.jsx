@@ -1,21 +1,44 @@
-import { LogOut, Pencil, Phone, Store, MessageSquare } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  LogOut, Pencil, Phone, Store, MessageSquare, AlertTriangle, Users, ChevronRight, Wifi, WifiOff,
+} from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WASetup from '../components/WASetup'
+import { api } from '../api/client'
 
 /**
- * Aaj = profile / settings.
- *
- * Stats grid, Jaldi Actions, recent orders all moved to Order Book and Khaata —
- * no need to repeat them here. This screen is just: who am I, my shop, WhatsApp
- * setup, sign out.
+ * Profile = shop identity, status, and at-a-glance "things needing attention"
+ * (Bakaya Customers + Khatam Saamaan). Order Book / Khaata / Saamaan handle
+ * the operational flows; Profile is where the shopkeeper checks-in on the
+ * shop itself.
  */
 export default function Dashboard() {
   const shopName       = useStore(s => s.shopName)
   const ownerPhone     = useStore(s => s.ownerPhone)
+  const customers      = useStore(s => s.customers)
+  const products       = useStore(s => s.products)
   const logout         = useStore(s => s.logout)
   const updateShopName = useStore(s => s.updateShopName)
   const toast          = useToast()
+  const nav            = useNavigate()
+
+  const [waConnected, setWaConnected] = useState(null)   // null = unknown / loading
+
+  // Probe WA status quietly; don't block render if backend unavailable.
+  useEffect(() => {
+    let cancelled = false
+    api.get('/api/whatsapp/status')
+      .then(s => { if (!cancelled) setWaConnected(!!s?.connected) })
+      .catch(() => { if (!cancelled) setWaConnected(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const debtors    = customers.filter(c => (c.udhaar || 0) > 0)
+                              .sort((a,b) => (b.udhaar||0) - (a.udhaar||0))
+  const totalDue   = debtors.reduce((s,c) => s + (c.udhaar || 0), 0)
+  const oosItems   = products.filter(p => !p.inStock)
 
   function handleEditShopName() {
     const next = window.prompt('Shop ka naam edit karein', shopName || '')
@@ -30,7 +53,7 @@ export default function Dashboard() {
   return (
     <div className="pb-32 min-h-full animate-fade-in">
 
-      {/* Compact green header — just identity, no stats */}
+      {/* Hero: identity */}
       <div
         className="relative overflow-hidden px-4 pt-12 pb-8"
         style={{ background: 'linear-gradient(135deg, #047857 0%, #059669 55%, #10b981 100%)' }}
@@ -60,13 +83,86 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Body */}
       <div className="px-4 mt-5 max-w-lg mx-auto space-y-5">
 
-        {/* WhatsApp Setup */}
+        {/* Status row — quick glance health of the shop */}
+        <div className="grid grid-cols-2 gap-3">
+          <StatusCard
+            icon={waConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
+            label="WhatsApp"
+            value={waConnected === null ? '…' : waConnected ? 'Logged in' : 'Logged out'}
+            tone={waConnected ? 'emerald' : waConnected === false ? 'amber' : 'zinc'}
+          />
+          <StatusCard
+            icon={<Phone size={14} />}
+            label="Phone"
+            value={ownerPhone ? `+91 ${ownerPhone}` : 'Not set'}
+            tone={ownerPhone ? 'sky' : 'zinc'}
+          />
+        </div>
+
+        {/* Bakaya Customers — moved here from Orders Summary */}
+        {debtors.length > 0 && (
+          <div className="card space-y-3">
+            <button
+              onClick={() => nav('/customers')}
+              className="w-full flex items-center gap-2 text-left active:opacity-70"
+            >
+              <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
+                <Users size={14} className="text-orange-500" />
+              </div>
+              <p className="font-bold text-zinc-900 text-sm flex-1">Bakaya Customers</p>
+              <span className="font-bold text-orange-500">₹{totalDue.toLocaleString('en-IN')}</span>
+              <ChevronRight size={14} className="text-zinc-300" />
+            </button>
+            <div className="divide-y divide-zinc-50">
+              {debtors.slice(0, 5).map(c => (
+                <div key={c.id} className="flex justify-between text-sm py-2">
+                  <span className="text-zinc-600 truncate pr-2">{c.name}</span>
+                  <span className="font-semibold text-zinc-900 flex-shrink-0">₹{c.udhaar}</span>
+                </div>
+              ))}
+              {debtors.length > 5 && (
+                <button
+                  onClick={() => nav('/customers')}
+                  className="w-full text-xs text-zinc-400 pt-2 text-left hover:text-zinc-600"
+                >
+                  +{debtors.length - 5} aur · Khaata me dekhein
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Khatam Saamaan — moved here from Orders Summary */}
+        {oosItems.length > 0 && (
+          <div className="card space-y-3">
+            <button
+              onClick={() => nav('/catalog')}
+              className="w-full flex items-center gap-2 text-left active:opacity-70"
+            >
+              <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
+                <AlertTriangle size={14} className="text-red-500" />
+              </div>
+              <p className="font-bold text-zinc-900 text-sm flex-1">Khatam Saamaan</p>
+              <span className="text-xs font-bold text-red-500">{oosItems.length} item</span>
+              <ChevronRight size={14} className="text-zinc-300" />
+            </button>
+            <div className="flex flex-wrap gap-1.5">
+              {oosItems.slice(0, 12).map(p => (
+                <span key={p.id} className="px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium">{p.name}</span>
+              ))}
+              {oosItems.length > 12 && (
+                <span className="px-2.5 py-1 text-xs text-zinc-400">+{oosItems.length - 12} aur</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* WhatsApp setup card (full UI for QR scan / disconnect) */}
         <div className="space-y-2">
           <p className="section-label px-1 flex items-center gap-1.5">
-            <MessageSquare size={11} /> WhatsApp
+            <MessageSquare size={11} /> WhatsApp Setup
           </p>
           <WASetup />
         </div>
@@ -107,6 +203,25 @@ export default function Dashboard() {
           Kirana Smart Orders
         </p>
       </div>
+    </div>
+  )
+}
+
+// ── Status card (small) ─────────────────────────────────────────────────────
+function StatusCard({ icon, label, value, tone = 'zinc' }) {
+  const tones = {
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber:   'bg-amber-50   text-amber-600',
+    sky:     'bg-sky-50     text-sky-600',
+    zinc:    'bg-zinc-100   text-zinc-500',
+  }
+  return (
+    <div className="card-elevated">
+      <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-2 ${tones[tone]}`}>
+        {icon}
+      </div>
+      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{label}</p>
+      <p className="text-sm font-extrabold text-zinc-900 mt-0.5 truncate">{value}</p>
     </div>
   )
 }
