@@ -38,14 +38,52 @@ export default defineConfig({
         }
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Precache static assets only — exclude HTML so the document is always
+        // fetched network-first. Otherwise an OLD service worker can serve a
+        // cached index.html that references hashed bundle URLs that the new
+        // deploy has already deleted, causing a "blank-screen-after-OAuth"
+        // crash where the app comes back from Google → tries to load
+        // /assets/index-<old-hash>.js → 404 → React never mounts.
+        globPatterns: ['**/*.{js,css,ico,png,svg,webmanifest}'],
+        // Don't fall back to cached index.html for navigations — let the
+        // NetworkFirst rule below handle it.
+        navigateFallback: null,
+        // When a new SW activates, drop precache entries whose URL/revision
+        // no longer matches. Combined with skipWaiting (default for
+        // registerType:'autoUpdate'), this self-heals after one reload.
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
+          // 1) HTML / page navigations — always try the network first so a
+          //    fresh index.html (with current hashed asset URLs) wins. Falls
+          //    back to cache only if offline. 3s timeout keeps mobile fast.
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            },
+          },
+          // 2) Hashed JS/CSS chunks — content-addressable, safe to cache
+          //    long-term. Keeps offline support working.
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/assets/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'assets',
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          // 3) Google Fonts.
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts-cache' }
-          }
-        ]
+            options: { cacheName: 'google-fonts-cache' },
+          },
+        ],
       }
     })
   ]
