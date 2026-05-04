@@ -38,6 +38,9 @@ router.get('/', async (req, res) => {
     customerPhone: o.customer_phone,
     status: o.status,
     total: Number(o.total),
+    paidCash:   Number(o.paid_cash   ?? 0),
+    paidUpi:    Number(o.paid_upi    ?? 0),
+    paidUdhaar: Number(o.paid_udhaar ?? 0),
     rawMessage: o.raw_message,
     createdAt: o.created_at,
     items: (o.order_items || []).map(i => ({
@@ -54,7 +57,10 @@ router.get('/', async (req, res) => {
 
 // POST /api/orders
 router.post('/', async (req, res) => {
-  const { customerName, customerPhone, status, total, rawMessage, items } = req.body
+  const {
+    customerName, customerPhone, status, total, rawMessage, items,
+    paidCash = 0, paidUpi = 0, paidUdhaar = 0,
+  } = req.body
   if (!customerName) return res.status(400).json({ error: 'customerName is required' })
 
   const { data: order, error: orderErr } = await db.from('orders')
@@ -65,6 +71,9 @@ router.post('/', async (req, res) => {
       status: status ?? 'pending',
       total: total ?? 0,
       raw_message: rawMessage ?? '',
+      paid_cash:    Number(paidCash)   || 0,
+      paid_upi:     Number(paidUpi)    || 0,
+      paid_udhaar:  Number(paidUdhaar) || 0,
     })
     .select()
     .single()
