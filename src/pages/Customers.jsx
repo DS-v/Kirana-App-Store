@@ -5,12 +5,12 @@ import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import { sendUdhaarReminder, sendUdhaarThankYou, waLink } from '../utils/whatsapp'
 
-// Sort options. Hinglish for the udhaar-based ones, English for naam-based.
+// Sort options — collapsed into a dropdown so they don't eat a full row.
 const SORTS = [
-  { id: 'udhaarDesc', label: 'Udhaar Bada → Chhota' },
-  { id: 'udhaarAsc',  label: 'Udhaar Chhota → Bada' },
-  { id: 'az',         label: 'A → Z' },
-  { id: 'za',         label: 'Z → A' },
+  { id: 'udhaarDesc', label: 'Bada udhaar pehle' },
+  { id: 'udhaarAsc',  label: 'Chhota udhaar pehle' },
+  { id: 'az',         label: 'Naam A → Z' },
+  { id: 'za',         label: 'Naam Z → A' },
 ]
 
 // Color tier strictly by udhaar amount — no hidden "days" logic, easy to reason about.
@@ -130,55 +130,33 @@ export default function Customers() {
 
   return (
     <div className="pb-32 min-h-full animate-fade-in">
-      {/* Header */}
+      {/* Header — total bakaya is the sole headline (was duplicated in a hero) */}
       <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
            style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
-        <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
-          <div>
+        <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto gap-3">
+          <div className="min-w-0">
             <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Khaata</h1>
             {totalDue > 0 ? (
-              <p className="text-[11px] font-bold text-orange-500 mt-0.5">
-                ₹{totalDue.toLocaleString('en-IN')} bakaya · {dueCount} customer
+              // Just the total bakaya — the per-bucket counts already live on
+              // the Sab / Sirf Udhaar Wale filter buttons just below.
+              <p className="text-xs font-bold mt-0.5 text-orange-500 truncate">
+                ₹{totalDue.toLocaleString('en-IN')} total bakaya
               </p>
             ) : (
-              <p className="text-[11px] font-bold text-emerald-500 mt-0.5">Hisaab saaf ✓</p>
+              <p className="text-xs font-bold text-emerald-500 mt-0.5">Hisaab saaf ✓</p>
             )}
           </div>
           <button
             onClick={() => setShowAdd(!showAdd)}
-            className="btn-primary py-2 px-4 text-sm w-auto flex items-center gap-1.5"
+            className="btn-primary py-2 px-4 text-sm w-auto flex items-center gap-1.5 flex-shrink-0"
           >
             <Plus size={15} /> Naya
           </button>
         </div>
       </div>
 
-      <div className="px-4 pt-4 max-w-lg mx-auto space-y-4">
+      <div className="px-4 pt-4 max-w-lg mx-auto space-y-3">
 
-      {/* Total bakaya hero */}
-      {totalDue > 0 && (
-        <div
-          className="rounded-2xl p-4 text-white"
-          style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' }}
-        >
-          <p className="text-xs font-semibold text-orange-100/90 uppercase tracking-wider">Total Bakaya</p>
-          <p className="text-3xl font-extrabold tracking-tight mt-0.5">
-            ₹{totalDue.toLocaleString('en-IN')}
-          </p>
-          <p className="text-xs text-orange-100/90 mt-1">
-            {dueCount} customer ka udhaar pending
-          </p>
-        </div>
-      )}
-
-      {/* Color legend — explains the dot tiers */}
-      <div className="flex items-center gap-3 bg-white rounded-2xl px-4 py-2.5 text-[11px] text-zinc-500 overflow-x-auto no-scrollbar"
-           style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-        <span className="font-semibold text-zinc-400 whitespace-nowrap">Rang:</span>
-        <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-emerald-500" /> &lt; ₹500</span>
-        <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-amber-500" /> ₹500–999</span>
-        <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-2 h-2 rounded-full bg-red-500" /> ₹1000+</span>
-      </div>
 
       {/* Add customer form */}
       {showAdd && (
@@ -221,19 +199,19 @@ export default function Customers() {
         </div>
       )}
 
-      {/* Filter toggle — now visually obvious which mode is on */}
+      {/* Filter toggle — Sab vs Sirf Udhaar */}
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={() => setOnlyUdhaar(false)}
-          className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
             !onlyUdhaar ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-500'
           }`}
         >
-          Sab Customer ({customers.length})
+          Sab ({customers.length})
         </button>
         <button
           onClick={() => setOnlyUdhaar(true)}
-          className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-colors ${
+          className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
             onlyUdhaar ? 'bg-orange-500 text-white' : 'bg-white border border-zinc-200 text-zinc-500'
           }`}
         >
@@ -241,23 +219,20 @@ export default function Customers() {
         </button>
       </div>
 
-      {/* Sort chips */}
-      <div className="seg-bar">
-        {SORTS.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setSort(s.id)}
-            className={`seg-item ${sort === s.id ? 'seg-item-active' : ''}`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-        <input className="input-field pl-10 text-sm" placeholder="Naam ya number se dhoondein…" value={search} onChange={e => setSearch(e.target.value)} />
+      {/* Search + sort on one row */}
+      <div className="flex gap-2 items-stretch">
+        <div className="relative flex-1 min-w-0">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input className="input-field pl-10 text-sm" placeholder="Naam ya number…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <select
+          value={sort}
+          onChange={e => setSort(e.target.value)}
+          className="input-field py-2 text-xs font-semibold w-44 flex-shrink-0"
+          title="Sort"
+        >
+          {SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
       </div>
 
       {/* Empty state */}
@@ -306,12 +281,10 @@ export default function Customers() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   {udhaar > 0 ? (
-                    <>
-                      <p className={`text-base font-extrabold ${T.text}`}>₹{udhaar.toLocaleString('en-IN')}</p>
-                      <p className="text-[10px] text-zinc-400 font-semibold">bakaya</p>
-                    </>
+                    // Color already signals "bakaya" — no need for a second label
+                    <p className={`text-base font-extrabold ${T.text}`}>₹{udhaar.toLocaleString('en-IN')}</p>
                   ) : (
-                    <p className="text-xs font-semibold text-emerald-500">Hisaab Saaf ✓</p>
+                    <p className="text-xs font-semibold text-emerald-500">Saaf ✓</p>
                   )}
                 </div>
               </button>
