@@ -11,6 +11,7 @@ import { parseOrderMessage, orderTotal } from '../utils/orderParser'
 import { STATUSES, STATUS_LABEL, STATUS_BADGE, STATUS_COLOR, STATUS_DOT, nextStatusOf, statusAdvanceToast } from '../utils/orderStatus'
 import SwipeableRow from '../components/SwipeableRow'
 import BottomSheet from '../components/BottomSheet'
+import ItemSwap from '../components/ItemSwap'
 import { guessCategory, guessUnit } from '../utils/fileImport'
 import supabase from '../lib/supabase'
 import { format, startOfWeek, startOfMonth } from 'date-fns'
@@ -64,6 +65,7 @@ export default function Orders() {
   const [custSearch, setCustSearch]       = useState('')      // customer picker search text
   const [showCustDrop, setShowCustDrop]   = useState(false)   // dropdown open?
   const [sendWaReceipt, setSendWaReceipt] = useState(true)    // opt-in WA receipt on save
+  const [swapTarget, setSwapTarget]       = useState(null)    // {idx, item} when ItemSwap is open
   const parseDebounceRef                  = useRef(null)
   const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
@@ -482,14 +484,21 @@ export default function Orders() {
 
               {parsedItems.map((item, idx) => (
                 <div key={idx} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${item.inStock ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                  <div className="flex-1 min-w-0">
+                  {/* Tap the name → open ItemSwap to replace this match */}
+                  <button
+                    onClick={() => setSwapTarget({ idx, item })}
+                    className="flex-1 min-w-0 text-left active:opacity-70"
+                    title="Tap to swap this item"
+                  >
                     <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
                     {item.sourceLine && (
                       <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-                        from: "{item.sourceLine}"
+                        from: "{item.sourceLine}" — tap to badlein
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-1">
+                  </button>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <div className="flex items-center gap-2">
                       {/* −/+ stepper instead of a number input — easier on mobile */}
                       <div className="flex items-center bg-white border border-zinc-200 rounded-lg overflow-hidden">
                         <button
@@ -606,6 +615,26 @@ export default function Orders() {
           )}
         </div>
       </BottomSheet>
+
+      {/* Tap-to-swap drawer — replaces an AI-matched cart item with a
+          different catalog product (or a one-off custom line). */}
+      <ItemSwap
+        open={!!swapTarget}
+        onClose={() => setSwapTarget(null)}
+        originalLine={swapTarget?.item.sourceLine || swapTarget?.item.productName}
+        currentItem={swapTarget?.item}
+        products={products}
+        onSwap={newItem => {
+          setParsedItems(p => p.map((it, i) => i === swapTarget.idx ? newItem : it))
+          setSwapTarget(null)
+          toast(`Swapped to ${newItem.productName}`, 'success')
+        }}
+        onOneOff={newItem => {
+          setParsedItems(p => p.map((it, i) => i === swapTarget.idx ? newItem : it))
+          setSwapTarget(null)
+          toast('One-off item daala', 'info')
+        }}
+      />
 
       {/* Filter tab bar */}
       <div className="seg-bar">
