@@ -208,7 +208,6 @@ export default function Orders() {
     .filter(o => o.status === 'delivered')
     .reduce((s,o) => s + (o.total||0), 0)
   const totalUdhaar  = customers.reduce((s,c) => s + (c.udhaar||0), 0)
-  const debtors      = customers.filter(c => c.udhaar > 0)
   const oosItems     = products.filter(p => !p.inStock)
 
   const PERIOD_LABEL = { day: 'Aaj', week: 'Is Hafte', month: 'Is Mahine' }
@@ -295,48 +294,17 @@ export default function Orders() {
             <SumCard icon={<XCircle size={17}/>}     label="Cancel"       value={sumCancelled}                               sub="orders"                                                  color="zinc" />
           </div>
 
-          {/* Top bakaya customers */}
-          {debtors.length > 0 && (
-            <div className="card space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
-                  <Users size={14} className="text-orange-500" />
-                </div>
-                <p className="font-bold text-zinc-900 text-sm flex-1">Bakaya Customers</p>
-                <span className="font-bold text-orange-500">₹{totalUdhaar.toLocaleString('en-IN')}</span>
+          {/* Text summary preview — what gets shared via WhatsApp / copied */}
+          {sumTotal > 0 && (
+            <div className="card space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="section-label">{PERIOD_LABEL[period]} ka Hisaab</p>
+                <span className="text-[10px] text-zinc-400 font-semibold">share-ready</span>
               </div>
-              <div className="divide-y divide-zinc-50">
-                {debtors.sort((a,b)=>(b.udhaar||0)-(a.udhaar||0)).slice(0,5).map(c => (
-                  <div key={c.id} className="flex justify-between text-sm py-2">
-                    <span className="text-zinc-600 truncate pr-2">{c.name}</span>
-                    <span className="font-semibold text-zinc-900 flex-shrink-0">₹{c.udhaar}</span>
-                  </div>
-                ))}
-                {debtors.length > 5 && (
-                  <p className="text-xs text-zinc-400 pt-2">+{debtors.length - 5} aur</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Khatam items */}
-          {oosItems.length > 0 && (
-            <div className="card space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
-                  <AlertTriangle size={14} className="text-red-500" />
-                </div>
-                <p className="font-bold text-zinc-900 text-sm flex-1">Khatam Saamaan</p>
-                <span className="text-xs font-bold text-red-500">{oosItems.length}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {oosItems.slice(0, 12).map(p => (
-                  <span key={p.id} className="px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium">{p.name}</span>
-                ))}
-                {oosItems.length > 12 && (
-                  <span className="px-2.5 py-1 text-xs text-zinc-400">+{oosItems.length - 12} aur</span>
-                )}
-              </div>
+              <pre className="text-xs text-zinc-700 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
+              <p className="text-[10px] text-zinc-400 px-1">
+                Bakaya customers aur khatam saamaan ki list Profile tab pe milegi.
+              </p>
             </div>
           )}
 
