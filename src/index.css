@@ -7,9 +7,9 @@
 /* ── Base ─────────────────────────────────────────────────────────────────── */
 @layer base {
   html, body {
-    @apply h-full text-ink-700;
+    height: 100%;
+    color: theme('colors.ink.700');
     background-color: #FCFAF4;     /* warm cream — paper feel */
-    /* Ultra-subtle paper grain — masked at 8% so it never competes with content */
     background-image:
       radial-gradient(circle at 0% 0%, rgba(241,146,0,0.04) 0%, transparent 35%),
       radial-gradient(circle at 100% 100%, rgba(5,150,105,0.04) 0%, transparent 40%);
@@ -20,23 +20,21 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  #root { @apply h-full; }
+  #root { height: 100%; }
 
-  /* Numerals always tabular — prices and counts shouldn't jiggle */
   .tabular-nums { font-variant-numeric: tabular-nums; }
 
-  /* Headings have tighter tracking + display weight */
   h1, h2, h3 { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; letter-spacing: -0.01em; }
   h1 { font-weight: 800; }
   h2 { font-weight: 700; }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-kirana-500 ring-offset-2 ring-offset-cream-50;
+    outline: none;
+    box-shadow: 0 0 0 2px theme('colors.kirana.500'), 0 0 0 4px theme('colors.cream.50');
   }
 
-  button, a, label[role] { @apply select-none; }
+  button, a, label[role] { user-select: none; -webkit-user-select: none; }
 
-  /* Auto-fill: keep the warm look even when browsers force their fill colors */
   input:-webkit-autofill,
   input:-webkit-autofill:focus {
     -webkit-box-shadow: 0 0 0 1000px #FCFAF4 inset;
@@ -88,17 +86,21 @@
 
   .btn-secondary {
     @apply w-full font-semibold py-3.5 px-6 rounded-2xl text-sm
-           text-ink-600 bg-white border border-cream-200
-           active:scale-[0.98] transition-transform;
+           bg-white border active:scale-[0.98] transition-transform;
+    color: theme('colors.ink.600');
+    border-color: theme('colors.cream.200');
     box-shadow: 0 1px 2px rgba(33,28,19,0.04), 0 2px 6px rgba(33,28,19,0.04);
   }
-  .btn-secondary:active {
-    @apply bg-cream-50;
-  }
+  .btn-secondary:active { background-color: theme('colors.cream.50'); }
 
   .btn-ghost {
-    @apply font-semibold py-2 px-3 rounded-xl text-sm text-ink-400
-           active:scale-[0.97] transition-all hover:bg-cream-100 hover:text-ink-700;
+    @apply font-semibold py-2 px-3 rounded-xl text-sm
+           active:scale-[0.97] transition-all;
+    color: theme('colors.ink.400');
+  }
+  .btn-ghost:hover {
+    background-color: theme('colors.cream.100');
+    color: theme('colors.ink.700');
   }
 
   /* ── Cards ───────────────────────────────────────────── */
@@ -119,7 +121,8 @@
   }
   /* "Ledger" card — used in Khaata for that handwritten-bookkeeping feel */
   .card-ledger {
-    @apply bg-cream-50 rounded-2xl p-4;
+    @apply rounded-2xl p-4;
+    background-color: theme('colors.cream.50');
     background-image: linear-gradient(180deg, #FCFAF4 0%, #F8F4E9 100%);
     box-shadow: 0 1px 2px rgba(139,44,61,0.04),
                 0 2px 8px rgba(139,44,61,0.04),
@@ -128,17 +131,23 @@
 
   /* ── Inputs ──────────────────────────────────────────── */
   .input-field {
-    @apply w-full border border-cream-200 rounded-xl px-4 py-3
-           text-sm text-ink-700 placeholder-ink-300
-           focus:outline-none focus:ring-2 focus:ring-kirana-400/60
-           focus:border-kirana-400 transition-all;
+    @apply w-full border rounded-xl px-4 py-3 text-sm
+           focus:outline-none focus:ring-2 transition-all;
+    color: theme('colors.ink.700');
+    border-color: theme('colors.cream.200');
     background-color: #FCFAF4;
   }
-  .input-field:focus { background-color: #ffffff; }
+  .input-field::placeholder { color: theme('colors.ink.300'); }
+  .input-field:focus {
+    background-color: #ffffff;
+    border-color: theme('colors.kirana.400');
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.20);
+  }
 
   /* ── Field label ─────────────────────────────────────── */
   .field-label {
-    @apply block text-xs font-semibold text-ink-400 mb-1.5 tracking-wide uppercase;
+    @apply block text-xs font-semibold mb-1.5 tracking-wide uppercase;
+    color: theme('colors.ink.400');
     font-size: 10px;
     letter-spacing: 0.06em;
   }
@@ -148,16 +157,42 @@
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold;
     letter-spacing: 0.01em;
   }
-  .status-confirmed { @apply badge bg-kirana-50  text-kirana-700  ring-1 ring-kirana-100; }
-  .status-pending   { @apply badge bg-saffron-100 text-saffron-700 ring-1 ring-saffron-200; }
-  .status-packed    { @apply badge bg-sky-50      text-sky-700     ring-1 ring-sky-100; }
-  .status-delivered { @apply badge bg-kirana-100  text-kirana-800  ring-1 ring-kirana-200; }
-  .status-credit    { @apply badge bg-khaata-50   text-khaata-700  ring-1 ring-khaata-100; }
-  .status-cancelled { @apply badge bg-ink-50      text-ink-400     ring-1 ring-ink-100; }
+  .status-confirmed {
+    @apply badge ring-1;
+    background-color: theme('colors.kirana.50');
+    color: theme('colors.kirana.700');
+    --tw-ring-color: theme('colors.kirana.100');
+  }
+  .status-pending {
+    @apply badge ring-1;
+    background-color: theme('colors.saffron.100');
+    color: theme('colors.saffron.700');
+    --tw-ring-color: theme('colors.saffron.200');
+  }
+  .status-packed   { @apply badge bg-sky-50 text-sky-700 ring-1 ring-sky-100; }
+  .status-delivered {
+    @apply badge ring-1;
+    background-color: theme('colors.kirana.100');
+    color: theme('colors.kirana.800');
+    --tw-ring-color: theme('colors.kirana.200');
+  }
+  .status-credit {
+    @apply badge ring-1;
+    background-color: theme('colors.khaata.50');
+    color: theme('colors.khaata.700');
+    --tw-ring-color: theme('colors.khaata.100');
+  }
+  .status-cancelled {
+    @apply badge ring-1;
+    background-color: theme('colors.ink.50');
+    color: theme('colors.ink.400');
+    --tw-ring-color: theme('colors.ink.100');
+  }
 
   /* ── Section label ───────────────────────────────────── */
   .section-label {
-    @apply text-[10px] font-bold text-ink-400 uppercase;
+    @apply text-[10px] font-bold uppercase;
+    color: theme('colors.ink.400');
     letter-spacing: 0.12em;
   }
 
@@ -170,10 +205,12 @@
   .seg-bar::-webkit-scrollbar { display: none; }
   .seg-item {
     @apply flex-shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-semibold
-           transition-all text-ink-400 whitespace-nowrap;
+           transition-all whitespace-nowrap;
+    color: theme('colors.ink.400');
   }
   .seg-item-active {
-    @apply bg-white text-ink-700;
+    @apply bg-white;
+    color: theme('colors.ink.700');
     box-shadow: 0 1px 3px rgba(33,28,19,0.10), 0 1px 2px rgba(33,28,19,0.06);
   }
 
@@ -183,12 +220,16 @@
   }
   .divider::before, .divider::after {
     content: '';
-    @apply flex-1 h-px bg-cream-200;
+    @apply flex-1 h-px;
+    background-color: theme('colors.cream.200');
   }
 
   /* ── List rows ───────────────────────────────────────── */
   .list-row {
-    @apply flex items-center gap-3 px-4 py-3.5 active:bg-cream-50 transition-colors;
+    @apply flex items-center gap-3 px-4 py-3.5 transition-colors;
+  }
+  .list-row:active {
+    background-color: theme('colors.cream.50');
   }
 
   /* ── Page ────────────────────────────────────────────── */
