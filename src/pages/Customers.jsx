@@ -258,7 +258,7 @@ export default function Customers() {
           const isEditing = editing?.id === cust.id
 
           return (
-            <div key={cust.id} className="card p-0 overflow-hidden animate-fade-up">
+            <div key={cust.id} className="card p-0 overflow-hidden">
               {/* Compact row */}
               <button
                 onClick={() => { if (!isEditing) setOpenId(open ? null : cust.id) }}

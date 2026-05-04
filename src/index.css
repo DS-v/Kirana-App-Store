@@ -95,7 +95,7 @@
 
   .btn-ghost {
     @apply font-semibold py-2 px-3 rounded-xl text-sm
-           active:scale-[0.97] transition-all;
+           active:scale-[0.97] transition-[transform,background-color,color] duration-150;
     color: theme('colors.ink.400');
   }
   .btn-ghost:hover {
@@ -132,7 +132,8 @@
   /* ── Inputs ──────────────────────────────────────────── */
   .input-field {
     @apply w-full border rounded-xl px-4 py-3 text-sm
-           focus:outline-none focus:ring-2 transition-all;
+           focus:outline-none focus:ring-2
+           transition-[border-color,box-shadow,background-color] duration-150;
     color: theme('colors.ink.700');
     border-color: theme('colors.cream.200');
     background-color: #FCFAF4;
@@ -205,8 +206,9 @@
   .seg-bar::-webkit-scrollbar { display: none; }
   .seg-item {
     @apply flex-shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-semibold
-           transition-all whitespace-nowrap;
+           transition-[background-color,color,box-shadow] duration-150 whitespace-nowrap;
     color: theme('colors.ink.400');
+    min-height: 36px;
   }
   .seg-item-active {
     @apply bg-white;
