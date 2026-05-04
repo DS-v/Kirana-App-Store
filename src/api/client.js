@@ -2,19 +2,31 @@ const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 async function request(method, path, body) {
   const token = localStorage.getItem('kirana_token')
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch (networkErr) {
+    throw new Error(`Cannot reach server — check your internet or backend URL (${BASE})`)
+  }
 
   if (res.status === 204) return null
 
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+  // Safely parse JSON — handle empty or non-JSON bodies (e.g. 502 from Railway)
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error(`Server error (${res.status}) — backend may be down or misconfigured`)
+  }
+
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
   return data
 }
 
