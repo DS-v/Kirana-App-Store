@@ -72,3 +72,29 @@ export function normaliseCustomer(c) {
     notes:   c.notes ?? '',
   }
 }
+
+/**
+ * Calls /api/llm/parse-catalog on free-form text and returns
+ * Array<{name,price,unit,category,inStock}> or null on any failure
+ * (network, timeout, LLM unavailable). Caller should fall back to a
+ * local regex parser when this returns null.
+ */
+export async function aiParseCatalog(text, { timeoutMs = 15000 } = {}) {
+  if (!text || !text.trim()) return null
+  try {
+    const data = await Promise.race([
+      api.post('/api/llm/parse-catalog', { text }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeoutMs)),
+    ])
+    if (!data?.products?.length) return null
+    return data.products.map(p => ({
+      name:     String(p.name || '').trim(),
+      price:    Number(p.price) || 0,
+      unit:     p.unit || 'packet',
+      category: p.category || 'Other',
+      inStock:  true,
+    })).filter(p => p.name)
+  } catch {
+    return null
+  }
+}

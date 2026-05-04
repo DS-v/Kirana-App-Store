@@ -7,6 +7,7 @@ import VoiceButton from '../components/VoiceButton'
 import FileImportModal from '../components/FileImportModal'
 import { parseCatalogCommand } from '../utils/speech'
 import { CATEGORIES as CAT_LIST, parsePastedCatalog, parseProductLine, guessCategory, guessUnit } from '../utils/fileImport'
+import { aiParseCatalog } from '../api/client'
 
 // Tab list (with All prepended)
 const CATEGORIES = ['All', ...CAT_LIST]
@@ -49,6 +50,7 @@ export default function Catalog() {
   const [showImport, setShowImport] = useState(false)
   const [pasteText, setPasteText] = useState('')
   const [pastePreview, setPastePreview] = useState([])
+  const [pasteSource, setPasteSource] = useState('quick')   // 'quick' | 'ai' | 'ai-loading'
   const [form, setForm] = useState({ name: '', price: '', unit: 'packet', category: 'Other', inStock: true })
 
   const filtered = useMemo(() => {
@@ -81,34 +83,57 @@ export default function Catalog() {
     if (ep) setForm({ name: ep.name, price: String(ep.price), unit: ep.unit || 'packet', category: ep.category || 'Other', inStock: ep.inStock })
   }, [editId, products])
 
-  // Re-parse paste preview as user types
+  // Two-stage paste preview:
+  //  1. Instant regex parse (200ms debounce) — never blocks the UI
+  //  2. LLM upgrade (1 s debounce) — replaces preview with smarter results
   useEffect(() => {
-    if (!showPaste || !pasteText.trim()) { setPastePreview([]); return }
-    const id = setTimeout(() => setPastePreview(parsePastedCatalog(pasteText)), 200)
-    return () => clearTimeout(id)
+    if (!showPaste || !pasteText.trim()) {
+      setPastePreview([]); setPasteSource('quick'); return
+    }
+
+    let cancelled = false
+    const quickId = setTimeout(() => {
+      if (cancelled) return
+      const rows = parsePastedCatalog(pasteText)
+      setPastePreview(rows)
+      setPasteSource('quick')
+    }, 200)
+
+    const aiId = setTimeout(async () => {
+      if (cancelled) return
+      setPasteSource('ai-loading')
+      const aiRows = await aiParseCatalog(pasteText)
+      if (cancelled) return
+      if (aiRows && aiRows.length) {
+        setPastePreview(aiRows)
+        setPasteSource('ai')
+      } else {
+        // LLM failed/unavailable — keep the regex preview
+        setPasteSource('quick')
+      }
+    }, 1000)
+
+    return () => { cancelled = true; clearTimeout(quickId); clearTimeout(aiId) }
   }, [pasteText, showPaste])
+
+  // Apply a parsed row to the form (used by both LLM and regex fallback).
+  function applyInferredToForm(row, { stockOverride } = {}) {
+    if (!row) return
+    setForm(f => ({
+      ...f,
+      name:     row.name || f.name,
+      price:    row.price != null ? String(row.price) : f.price,
+      unit:     row.unit || f.unit,
+      category: row.category || f.category,
+      inStock:  stockOverride !== undefined ? stockOverride : (row.inStock ?? f.inStock),
+    }))
+  }
 
   async function handleVoiceResult(text) {
     const cmd = parseCatalogCommand(text)
-    if (cmd.action === 'add') {
-      // Voice → infer EVERY field we can: name, price, unit, category, stock.
-      // Strip leading "add"/"naya"/"daalo" verbs before parsing so the line
-      // looks like a normal "name price [unit]" entry the paste parser knows.
-      const cleaned = text.replace(/^\s*(add|new|naya|daalo|dalo|create)\s+/i, '').trim()
-      const inferred = parseProductLine(cleaned)
-      const baseName  = inferred?.name || cmd.name || cleaned
-      setForm(f => ({
-        ...f,
-        name:     baseName,
-        price:    inferred?.price != null ? String(inferred.price)
-                : cmd.price ? String(cmd.price) : f.price,
-        unit:     inferred?.unit  || guessUnit(text)         || f.unit,
-        category: inferred?.category || guessCategory(baseName) || f.category,
-        inStock:  cmd.inStock !== undefined ? cmd.inStock : f.inStock,
-      }))
-      setShowAdd(true)
-      toast(`Recognised: ${baseName}`, 'info')
-    } else if (cmd.action === 'setOOS' || cmd.action === 'setStock') {
+
+    // OOS / restock commands run instantly — no LLM round-trip needed.
+    if (cmd.action === 'setOOS' || cmd.action === 'setStock') {
       const match = products.find(p =>
         p.name.toLowerCase().includes(cmd.name) || (p.aliases || []).some(a => a.toLowerCase().includes(cmd.name))
       )
@@ -116,21 +141,26 @@ export default function Catalog() {
         try { await updateProduct(match.id, { inStock: cmd.inStock }); toast(`${match.name} ${cmd.inStock ? 'stock me' : 'khatam'}`, 'success') }
         catch (e) { toast(e.message, 'error') }
       } else { toast('Saamaan nahi mila', 'error') }
-    } else {
-      // No command verb detected — still try to parse "name price" + infer.
-      const inferred = parseProductLine(text)
-      if (inferred) {
-        setForm(f => ({
-          ...f,
-          name:     inferred.name,
-          price:    String(inferred.price),
-          unit:     inferred.unit,
-          category: inferred.category,
-        }))
-      } else {
-        setForm(f => ({ ...f, name: text, category: guessCategory(text), unit: guessUnit(text) }))
-      }
-      setShowAdd(true)
+      return
+    }
+
+    // Add / unknown → strip command verbs, then ask the LLM. Regex parser is
+    // the offline-fast fallback if the network is down.
+    const cleaned = text.replace(/^\s*(add|new|naya|daalo|dalo|create|likho|likh)\s+/i, '').trim()
+    const stockOverride = cmd.inStock !== undefined ? cmd.inStock : true
+
+    setShowAdd(true)
+    // Show what we have from regex while LLM thinks
+    const fast = parseProductLine(cleaned)
+    if (fast) applyInferredToForm(fast, { stockOverride })
+    else applyInferredToForm({ name: cleaned, category: guessCategory(cleaned), unit: guessUnit(text) }, { stockOverride })
+    toast(`Recognised: ${fast?.name || cleaned}`, 'info')
+
+    // Upgrade with LLM
+    const aiRows = await aiParseCatalog(cleaned)
+    if (aiRows && aiRows.length) {
+      applyInferredToForm(aiRows[0], { stockOverride })
+      toast('AI ne aur acche se samjha ✦', 'success')
     }
   }
 
@@ -229,15 +259,21 @@ export default function Catalog() {
               value={pasteText}
               onChange={e => setPasteText(e.target.value)}
             />
-            {pastePreview.length > 0 && (
+            {(pastePreview.length > 0 || pasteSource === 'ai-loading') && (
               <div className="space-y-1.5">
-                <p className="text-[10px] font-bold text-zinc-500 uppercase">Preview ({pastePreview.length} items)</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase">
+                    Preview ({pastePreview.length} items)
+                  </p>
+                  <PasteSourceBadge source={pasteSource} />
+                </div>
                 <div className="bg-zinc-50 rounded-xl p-2 max-h-40 overflow-y-auto no-scrollbar space-y-1">
                   {pastePreview.slice(0, 8).map((r, i) => (
                     <div key={i} className="flex items-center justify-between text-xs px-2 py-1.5 bg-white rounded-lg">
                       <span className="font-semibold text-zinc-800 truncate">{r.name}</span>
                       <span className="flex gap-2 items-center text-zinc-500 flex-shrink-0">
                         <span className="text-[10px] uppercase">{r.category}</span>
+                        <span className="text-[10px] text-zinc-400">{r.unit}</span>
                         <span className="font-bold text-zinc-900">₹{r.price}</span>
                       </span>
                     </div>
@@ -409,6 +445,22 @@ export default function Catalog() {
 // ── Compact voice button (icon-only, same height as Naya) ───────────────────
 function CompactVoiceButton({ onResult }) {
   return <VoiceButton onResult={onResult} size="xs" compact label="Bolo aur add karein" />
+}
+
+// Tiny source pill for the paste preview
+function PasteSourceBadge({ source }) {
+  if (source === 'ai-loading') {
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+        <span className="w-2.5 h-2.5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+        AI parsing…
+      </span>
+    )
+  }
+  if (source === 'ai') {
+    return <span className="text-[10px] font-bold text-emerald-600">✦ AI parsed</span>
+  }
+  return <span className="text-[10px] font-bold text-zinc-400">Quick parsed</span>
 }
 
 // ── Minimal product tile ─────────────────────────────────────────────────────
