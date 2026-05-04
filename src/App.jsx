@@ -108,7 +108,12 @@ export default function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (cancelled) return
       if (session && !token) {
-        const phone        = session.user.phone || ''
+        // Owner phone: user_metadata > auth.phone > localStorage. Owner-set
+        // phone (metadata) wins because the user can change it from Profile.
+        const phone        = session.user.user_metadata?.owner_phone
+                          || session.user.phone
+                          || localStorage.getItem('kirana_phone')
+                          || ''
         const fromMetadata = session.user.user_metadata?.shop_name
         const fromStorage  = localStorage.getItem('kirana_shop_name')
         let name           = fromMetadata || fromStorage || ''
