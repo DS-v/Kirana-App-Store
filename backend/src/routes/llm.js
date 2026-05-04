@@ -284,6 +284,158 @@ function validate(obj) {
   return { items, unrecognised }
 }
 
+// ── Deterministic post-processors ─────────────────────────────────────────────
+// The LLM gets us 95-97 % of the way there; these passes handle the long tail
+// without prompt fiddling. Order matters — each builds on the previous.
+
+// Lines we never want as items or unrecognised — pure chatter.
+const CHATTER_RE = /^(hi|hello|namaste|namaskar|namaste 🙏|🙏|thanks|thank.*you|dhanyawaad|dhanyawad|regards|sharma ji|see you|bye|kal|abhi|baad|delivery|deliver|please|pls|paisa|payment|kal de.*g[au]|cash|upi)/i
+const PHONE_RE   = /^[+\s\d\-]{8,}$/
+const DATE_RE    = /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/
+
+function isNotChatter(line) {
+  if (!line) return false
+  const trimmed = line.trim()
+  if (trimmed.length < 2) return false
+  if (CHATTER_RE.test(trimmed)) return false
+  if (PHONE_RE.test(trimmed))   return false
+  if (DATE_RE.test(trimmed))    return false
+  // Lines that are JUST a greeting/closing emoji
+  if (/^[🙏👍🙂😊🤝]+$/.test(trimmed)) return false
+  return true
+}
+
+// Tokenise, keep alpha tokens >2 chars. Catches words across hi/eng/Devanagari.
+function tokensOf(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFKD')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(t => t.length > 2)
+}
+
+function fuzzyOverlap(a, b) {
+  const A = new Set(tokensOf(a))
+  const B = new Set(tokensOf(b))
+  for (const t of A) if (B.has(t)) return true
+  return false
+}
+
+// Build a lookup so we can check aliases for an item (handles Hinglish:
+// magi→Maggi, aata→atta, namak→Salt, dudh→Milk, etc).
+function indexCatalog(catalog) {
+  const idx = new Map()
+  for (const p of catalog || []) {
+    const text = [p.name, ...(p.aliases || [])].join(' ')
+    idx.set(p.id, text)
+  }
+  return idx
+}
+
+// 1. Phantom-killer: items whose product name+aliases share NO meaningful
+//    token with any non-chatter input line are hallucinations. We use aliases
+//    so "Maggi Noodles" (alias: magi) survives input "magi 3".
+function dropPhantoms(parsed, message, catalogIdx) {
+  const lines = message.split('\n').filter(isNotChatter)
+  parsed.items = parsed.items.filter(it => {
+    const haystack = catalogIdx.get(it.productId) || it.productName
+    return lines.some(line => fuzzyOverlap(haystack, line))
+  })
+  return parsed
+}
+
+// 2. Deduplicate across lists: an unrecognised line that shares a meaningful
+//    token with a successfully-matched product name is almost always the same
+//    physical line counted twice (LLM emitted both). Drop the unrecognised side.
+function dedupAcrossLists(parsed) {
+  parsed.unrecognised = parsed.unrecognised.filter(u =>
+    !parsed.items.some(it => fuzzyOverlap(it.productName, u.originalLine))
+  )
+  return parsed
+}
+
+// 3. Food / non-food guard. If the customer line is clearly food and the
+//    matched product is clearly non-food (or vice versa), drop the match and
+//    re-route the line into unrecognised. Catches the egg→Band-Aid family.
+const FOOD_WORDS = /\b(anda|egg|dudh|doodh|milk|atta|aata|flour|dal|namak|salt|cheeni|chini|sugar|chai|tea|chawal|rice|haldi|turmeric|mirch|chilli|dhaniya|jeera|cumin|garam.?masala|masala|ghee|paneer|dahi|curd|lassi|biscuit|chocolate|chips|maggi|noodles|bread|paav|pav|tomato|onion|aloo|potato|chicken|fish|fruit|fruits|sabzi|vegetable|paani|water|juice|coke|pepsi|thums|sprite|fanta|cola|sauce|jam|honey|achar|pickle)\b/i
+const NONFOOD_WORDS = /\b(band.?aid|bandage|crocin|antiseptic|cream|lotion|shampoo|soap|sabun|hair.?oil|toothpaste|toothbrush|detergent|surf|vim|dishwash|phenyl|harpic|toilet|sanitizer|tissue|battery|matchbox|agarbatti|candle|incense|wipes)\b/i
+
+function classify(text) {
+  const t = (text || '').toLowerCase()
+  if (FOOD_WORDS.test(t))    return 'food'
+  if (NONFOOD_WORDS.test(t)) return 'nonfood'
+  return 'unknown'
+}
+
+function foodCategoryGuard(parsed, message, catalogIdx) {
+  const lines = message.split('\n').filter(isNotChatter)
+  parsed.items = parsed.items.filter(it => {
+    const haystack = catalogIdx.get(it.productId) || it.productName
+    const productClass = classify(haystack)
+    if (productClass === 'unknown') return true
+    // Find the source line by token overlap (using aliases too).
+    const sourceLine = lines.find(line => fuzzyOverlap(haystack, line))
+    // If no source line is identifiable but the line set has ANY food line and
+    // the product is non-food (or vice versa), still apply guard via classify.
+    const checkLines = sourceLine ? [sourceLine] : lines
+    for (const line of checkLines) {
+      const lineClass = classify(line)
+      if (lineClass !== 'unknown' && lineClass !== productClass &&
+          (sourceLine || classify(haystack) === 'nonfood')) {
+        return false
+      }
+    }
+    return true
+  })
+  return parsed
+}
+
+// 4. Line-coverage: every non-chatter input line must end up SOMEWHERE
+//    (items or unrecognised). Recovers lines the LLM silently skipped.
+function ensureLineCoverage(parsed, message, catalogIdx) {
+  const lines = message.split('\n').filter(isNotChatter)
+  const accountedFor = new Set()
+
+  for (const it of parsed.items) {
+    const haystack = catalogIdx.get(it.productId) || it.productName
+    const sourceLine = lines.find(line =>
+      !accountedFor.has(line) && fuzzyOverlap(haystack, line)
+    )
+    if (sourceLine) {
+      accountedFor.add(sourceLine)
+      it.sourceLine = sourceLine.trim()  // surface to UI for "from: …" caption
+    }
+  }
+  for (const u of parsed.unrecognised) {
+    const sourceLine = lines.find(line =>
+      !accountedFor.has(line) &&
+      (line.trim() === u.originalLine.trim() || fuzzyOverlap(line, u.originalLine))
+    )
+    if (sourceLine) accountedFor.add(sourceLine)
+  }
+
+  for (const line of lines) {
+    if (!accountedFor.has(line)) {
+      const trimmed = line.trim()
+      const qtyMatch = trimmed.match(/(\d+(?:\.\d+)?)/)
+      parsed.unrecognised.push({
+        originalLine: trimmed,
+        qty: qtyMatch ? parseFloat(qtyMatch[1]) : 1,
+      })
+      accountedFor.add(line)
+    }
+  }
+  return parsed
+}
+
+function postProcess(parsed, message, catalog = []) {
+  const catalogIdx = indexCatalog(catalog)
+  parsed = foodCategoryGuard(parsed, message, catalogIdx)
+  parsed = dropPhantoms(parsed, message, catalogIdx)
+  parsed = dedupAcrossLists(parsed)
+  parsed = ensureLineCoverage(parsed, message, catalogIdx)
+  return parsed
+}
+
 // ── Route: text order parsing ──────────────────────────────────────────────────
 
 router.post('/parse-order', async (req, res) => {
@@ -292,11 +444,11 @@ router.post('/parse-order', async (req, res) => {
     return res.status(400).json({ error: 'message is required' })
 
   try {
-    return res.json({ ...validate(await callGroq(message, catalog)), source: 'groq' })
+    return res.json({ ...postProcess(validate(await callGroq(message, catalog)), message, catalog), source: 'groq' })
   } catch (e) { console.warn('[LLM] Groq text failed:', e.message) }
 
   try {
-    return res.json({ ...validate(await callGemini(message, catalog)), source: 'gemini' })
+    return res.json({ ...postProcess(validate(await callGemini(message, catalog)), message, catalog), source: 'gemini' })
   } catch (e) { console.warn('[LLM] Gemini text failed:', e.message) }
 
   return res.status(503).json({ error: 'LLM unavailable' })
