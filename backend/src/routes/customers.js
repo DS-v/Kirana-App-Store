@@ -6,10 +6,12 @@ const router = Router()
 router.use(requireAuth)
 
 router.get('/', async (req, res) => {
+  // Override Supabase REST default 1000-row cap (.range covers up to 100k rows).
   const { data, error } = await db.from('customers')
     .select('*')
     .eq('shop_id', req.userId)
     .order('name')
+    .range(0, 99999)
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
 })

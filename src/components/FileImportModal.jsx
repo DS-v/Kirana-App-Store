@@ -27,7 +27,8 @@ function isExcel(name) { return ['xlsx','xls','csv','ods'].includes(extOf(name))
 // ── DropZone ──────────────────────────────────────────────────────────────────
 
 function DropZone({ onFile }) {
-  const inputRef        = useRef(null)
+  const fileRef         = useRef(null)
+  const cameraRef       = useRef(null)
   const [drag, setDrag] = useState(false)
 
   const handleDrop = useCallback(e => {
@@ -37,24 +38,52 @@ function DropZone({ onFile }) {
   }, [onFile])
 
   return (
-    <div
-      onDragOver={e => { e.preventDefault(); setDrag(true) }}
-      onDragLeave={() => setDrag(false)}
-      onDrop={handleDrop}
-      onClick={() => inputRef.current?.click()}
-      className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
-        drag ? 'border-violet-400 bg-violet-50' : 'border-zinc-200 hover:border-violet-300 hover:bg-zinc-50'
-      }`}
-    >
-      <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center">
-        <Upload size={22} className="text-zinc-400" />
+    <div className="space-y-2">
+      {/* Camera capture — top-of-list on mobile because that's the kirana
+          shopkeeper's most-used path: snap the printed price list */}
+      <button
+        type="button"
+        onClick={() => cameraRef.current?.click()}
+        className="w-full flex items-center gap-3 bg-emerald-500 active:bg-emerald-600 text-white rounded-2xl px-4 py-4 transition-colors"
+      >
+        <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl flex-shrink-0">📸</span>
+        <div className="flex-1 text-left">
+          <p className="text-sm font-bold">Photo lo (camera)</p>
+          <p className="text-[11px] text-emerald-100/90">Price list ya rate card scan karein</p>
+        </div>
+      </button>
+
+      {/* Browse / drop area — secondary path */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDrag(true) }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={handleDrop}
+        onClick={() => fileRef.current?.click()}
+        className={`border-2 border-dashed rounded-2xl p-5 flex items-center gap-3 cursor-pointer transition-colors ${
+          drag ? 'border-violet-400 bg-violet-50' : 'border-zinc-200 hover:border-violet-300 hover:bg-zinc-50'
+        }`}
+      >
+        <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
+          <Upload size={18} className="text-zinc-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-zinc-700">File chunein</p>
+          <p className="text-[11px] text-zinc-400">Excel · PDF · Word · Text · gallery photo</p>
+        </div>
       </div>
-      <div className="text-center">
-        <p className="text-sm font-semibold text-zinc-700">Drop a file or tap to browse</p>
-        <p className="text-xs text-zinc-400 mt-1">Excel · PDF · Word · Text · Image (JPG, PNG…)</p>
-      </div>
+
+      {/* Camera-only input — capture forces rear camera on mobile */}
       <input
-        ref={inputRef}
+        ref={cameraRef}
+        type="file"
+        className="hidden"
+        accept="image/*"
+        capture="environment"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }}
+      />
+      {/* Generic file input */}
+      <input
+        ref={fileRef}
         type="file"
         className="hidden"
         accept=".xlsx,.xls,.csv,.ods,.pdf,.docx,.txt,.tsv,.jpg,.jpeg,.png,.webp,.bmp,.gif,.tiff,.tif"
@@ -64,69 +93,86 @@ function DropZone({ onFile }) {
   )
 }
 
-// ── PreviewTable ──────────────────────────────────────────────────────────────
+// ── PreviewList ──────────────────────────────────────────────────────────────
+// Mobile-first card-per-row layout. Each row is a tappable card showing
+// name + price prominently, with unit / category as small selects below.
+// On wider screens (sm+) we render an inline horizontal layout.
 
-function PreviewTable({ rows, onChange, onToggle, onToggleAll }) {
-  const allSelected = rows.every(r => r.selected)
+function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
+  const allSelected = rows.length > 0 && rows.every(r => r.selected)
   return (
-    <div className="overflow-x-auto -mx-4">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-zinc-100">
-            <th className="px-4 py-2 text-left w-8">
-              <input type="checkbox" checked={allSelected} onChange={() => onToggleAll(!allSelected)} className="rounded" />
-            </th>
-            <th className="px-2 py-2 text-left font-semibold text-zinc-500 min-w-[140px]">Name</th>
-            <th className="px-2 py-2 text-left font-semibold text-zinc-500 w-20">Price ₹</th>
-            <th className="px-2 py-2 text-left font-semibold text-zinc-500 w-24">Unit</th>
-            <th className="px-2 py-2 text-left font-semibold text-zinc-500 w-28">Category</th>
-            <th className="px-2 py-2 w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className={`border-b border-zinc-50 ${row.selected ? '' : 'opacity-40'}`}>
-              <td className="px-4 py-1.5">
-                <input type="checkbox" checked={row.selected} onChange={() => onToggle(i)} className="rounded" />
-              </td>
-              <td className="px-2 py-1.5">
-                <input
-                  className="w-full border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400"
-                  value={row.name} onChange={e => onChange(i, 'name', e.target.value)}
-                />
-              </td>
-              <td className="px-2 py-1.5">
-                <input
-                  type="number"
-                  className="w-full border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400"
-                  value={row.price} onChange={e => onChange(i, 'price', parseFloat(e.target.value) || 0)}
-                />
-              </td>
-              <td className="px-2 py-1.5">
-                <select
-                  className="w-full border border-zinc-200 rounded-lg px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
-                  value={row.unit} onChange={e => onChange(i, 'unit', e.target.value)}
-                >
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
-                </select>
-              </td>
-              <td className="px-2 py-1.5">
-                <select
-                  className="w-full border border-zinc-200 rounded-lg px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
-                  value={row.category} onChange={e => onChange(i, 'category', e.target.value)}
-                >
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </td>
-              <td className="px-2 py-1.5">
-                <button onClick={() => onChange(i, '_delete', true)} className="text-zinc-300 hover:text-red-400 transition-colors">
-                  <Trash2 size={13} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      <button
+        onClick={() => onToggleAll(!allSelected)}
+        className="w-full flex items-center justify-between bg-zinc-50 rounded-xl px-3 py-2 text-xs font-bold text-zinc-600 active:bg-zinc-100"
+      >
+        <span className="flex items-center gap-2">
+          <input type="checkbox" checked={allSelected} readOnly className="rounded pointer-events-none" />
+          {allSelected ? 'Sab unselect karein' : 'Sab select karein'}
+        </span>
+        <span className="text-zinc-400">{rows.filter(r => r.selected).length} / {rows.length}</span>
+      </button>
+
+      <div className="space-y-1.5">
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            className={`rounded-xl border bg-white px-3 py-2.5 ${
+              row.selected ? 'border-zinc-200' : 'border-zinc-100 opacity-50'
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={row.selected}
+                onChange={() => onToggle(i)}
+                className="rounded mt-2 flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-violet-400"
+                    placeholder="Naam"
+                    value={row.name}
+                    onChange={e => onChange(i, 'name', e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="w-20 border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-bold tabular-nums focus:outline-none focus:ring-1 focus:ring-violet-400"
+                    placeholder="₹"
+                    value={row.price}
+                    onChange={e => onChange(i, 'price', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                    value={row.unit}
+                    onChange={e => onChange(i, 'unit', e.target.value)}
+                  >
+                    {UNITS.map(u => <option key={u}>{u}</option>)}
+                  </select>
+                  <select
+                    className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                    value={row.category}
+                    onChange={e => onChange(i, 'category', e.target.value)}
+                  >
+                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  <button
+                    onClick={() => onChange(i, '_delete', true)}
+                    className="w-8 h-7 flex items-center justify-center rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                    title="Hata do"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -370,7 +416,7 @@ export default function FileImportModal({ onClose, addProduct }) {
                 </button>
               </div>
 
-              <PreviewTable rows={rows} onChange={changeRow} onToggle={toggleRow} onToggleAll={toggleAll} />
+              <PreviewList rows={rows} onChange={changeRow} onToggle={toggleRow} onToggleAll={toggleAll} />
             </>
           )}
 
