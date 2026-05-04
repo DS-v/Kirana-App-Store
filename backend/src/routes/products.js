@@ -16,13 +16,27 @@ function inferCategory(name) {
 }
 
 // GET /api/products
+// Supabase REST caps response rows at 1000 by default. .range(0, 99999) MAY
+// be silently re-capped by the project's max-rows config. To be foolproof we
+// page in chunks of 1000 and stop when a chunk is short. Handles 5k+ SKU
+// catalogs without leaving rows behind.
 router.get('/', async (req, res) => {
-  const { data, error } = await db.from('products')
-    .select('*')
-    .eq('shop_id', req.userId)
-    .order('name')
-  if (error) return res.status(500).json({ error: error.message })
-  res.json(data)
+  const PAGE = 1000
+  const all = []
+  for (let from = 0; ; from += PAGE) {
+    const to = from + PAGE - 1
+    const { data, error } = await db.from('products')
+      .select('*')
+      .eq('shop_id', req.userId)
+      .order('name')
+      .range(from, to)
+    if (error) return res.status(500).json({ error: error.message })
+    if (!data?.length) break
+    all.push(...data)
+    if (data.length < PAGE) break          // last page
+    if (all.length > 50000) break          // safety stop
+  }
+  res.json(all)
 })
 
 // POST /api/products
