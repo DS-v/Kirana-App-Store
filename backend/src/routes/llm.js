@@ -32,147 +32,89 @@ function slimCatalog(catalog) {
 // ── Text order prompt ──────────────────────────────────────────────────────────
 
 function buildTextPrompt(message, catalog) {
-  return `You parse a kirana customer's order (Hindi / English / Hinglish) against the shop's catalog. Be CONSERVATIVE: when in doubt, mark UNRECOGNISED. A wrong match is worse than no match.
+  return `You parse a kirana customer order against the shop's catalog. Be CONSERVATIVE — when in doubt, mark UNRECOGNISED. Wrong matches and hallucinations are unacceptable.
 
-═══ HARD RULES — DO NOT VIOLATE ═══
+═══ ABSOLUTE RULES ═══
 
-1. ONE LINE → ONE OUTPUT.
-   Each line in the customer message produces AT MOST ONE entry, in EITHER \`items\` OR \`unrecognised\` — never both, never duplicated.
+R0  NO HALLUCINATION. Output entries (items + unrecognised) MUST trace 1-to-1 back to a literal line in the customer message. NEVER add a product the message did not mention, even if it is a typical kirana basket item like sugar, salt, oil, milk, chilli, rice. The output mirrors the input, nothing else.
 
-2. NO FORCED / FUZZY MATCHES.
-   Match ONLY when the catalog product is unambiguously the same thing the customer asked for. If the catalog has nothing close, mark UNRECOGNISED. Do not pick a product just because it shares letters.
+R1  ONE LINE → ONE OUTPUT. Each customer line produces AT MOST ONE entry, in EITHER \`items\` OR \`unrecognised\` — never both, never duplicated across the two lists.
 
-3. CATEGORY / TYPE MUST ALIGN.
-   Reject any match where the customer's item and the catalog product are different KINDS:
-     milk ≠ basundi / lassi / dahi / yogurt / cream
-     soap ≠ cream / lotion / shampoo
-     cooking oil ≠ hair oil
-     biscuit ≠ chocolate / chips
-     turmeric (haldi) ≠ hair oil
-     coriander (dhaniya) ≠ juice
-     egg ≠ band-aid / bandage
-     atta / flour ≠ ready meal
+R2  CONSERVATIVE MATCH. Match ONLY when the catalog product is the same kind of thing the customer wrote. Otherwise UNRECOGNISED.
 
-4. SIZE SUFFIX vs QUANTITY.
-   A number IMMEDIATELY followed by a weight/volume unit (g, gm, kg, ml, L, litre) attached to a product name is the SIZE / variant — it is part of the product, NOT the qty.
-   Examples:
-     "200g vim bar"           → qty=1   (size 200g is part of the product variant)
-     "vim bar 200g 2"         → qty=2
-     "Dettol soap 75g 2"      → qty=2
-     "garam masala 50g"       → qty=1
-     "haldi 100g"             → qty=1
-     "5 anda"                 → qty=5   (no unit — 5 is qty)
-     "do bottle thums up"     → qty=2
-     "1 kg aata"              → qty=1   (one packet of 1kg atta)
-     "2 kg chawal"            → qty=2   (two packets of 1kg, OR 2 of whatever size catalog has)
+R3  CATEGORY WALL. FOOD (anda/egg, dudh/milk, atta, dal, namak, cheeni, masala, vegetables, fruits, paneer, ghee, dahi, lassi, ice cream, biscuit, chocolate, chips) NEVER matches NON-FOOD (Band-Aid, soap, shampoo, cream, hair oil, detergent, dishwash, toothpaste, agarbatti, candle, batteries, stationery). Even if names share letters or sizes match.
 
-5. NEVER INVENT IDs.
-   \`productId\` MUST be a real id from the supplied catalog. If unsure, omit the item from \`items\` and put the original line in \`unrecognised\`.
+R4  SIZE vs QTY.  Number+unit (g, gm, kg, ml, L, litre) attached to a product name = size, NOT qty.
+       "200g vim bar"     → qty=1
+       "garam masala 50g" → qty=1
+       "Dettol soap 75g 2"→ qty=2
+       "5 anda"           → qty=5 (no unit)
+       "do bottle thums"  → qty=2
+       "1 kg aata"        → qty=1
 
-6. SKIP CHATTER.
-   Greetings, addresses, signatures, payment promises ("paisa kal de dunga"), delivery instructions, dates, phone numbers — drop these silently. They are NOT items.
+R5  REAL IDS ONLY.  productId MUST be an id from the catalog below.
 
-═══ NEGATIVE EXAMPLES — THESE ARE WRONG ═══
+R6  SKIP CHATTER. Greetings, signatures, addresses, payment promises, delivery instructions, dates, phone numbers — do not output anything for these.
 
-  "P-G 2 packet"        → Britannia Pure Magic     ❌ different brand
-  "5 anda"              → Band-Aid Flexible        ❌ egg ≠ bandage
-  "haldi powder ek pao" → L'Oreal Hair Oil         ❌ turmeric ≠ hair oil
-  "dhaniya patta"       → B Natural Litchi Juice   ❌ coriander ≠ fruit juice
-  "amul dudh 2 litre"   → Amul Basundi             ❌ milk ≠ basundi
-  "Dettol soap 75g"     → Dettol Antiseptic Cream  ❌ soap ≠ cream
-  "200g vim bar"        → Vim Bar qty=200          ❌ size mistaken for qty
-  "garam masala 50g"    → product qty=50           ❌ size mistaken for qty
+═══ HINDI VOCAB (translate first, then look up) ═══
 
-In all the above, the correct answer is either an EXACT match or UNRECOGNISED.
+Numbers: ek=1 do=2 teen=3 char=4 paanch=5 chhe=6 saat=7 aath=8 nau=9 das=10
+Sizes:   aadha=0.5 (size hint, qty stays 1) · paav/pao=0.25 (size hint, qty stays 1)
+Devanagari numbers: एक=1 दो=2 तीन=3 चार=4 पाँच=5 छह=6 सात=7 आठ=8 नौ=9 दस=10
 
-═══ HINDI / HINGLISH VOCABULARY ═══
+Words → English equivalents:
+  dudh/doodh/दूध=milk · anda/अंडा=egg · namak/नमक=salt · cheeni/चीनी=sugar
+  chai/चाय=tea · aata/atta/आटा=wheat flour · chawal/चावल=rice · dal/दाल=lentils
+  haldi/हल्दी=turmeric · mirch/mirchi=chilli · dhaniya/धनिया=coriander · jeera=cumin
+  sabun/साबुन=soap · tel/तेल=cooking oil · paani=water · ghee=ghee · biscuit=biscuit
 
-Numbers:    ek=1, do=2, teen=3, char=4, paanch=5, chhe=6, saat=7, aath=8, nau=9, das=10, gyarah=11, barah=12
-Fractions:  aadha/aadhi=0.5, paav/pao/pau=0.25 (so "ek pao" = quarter = 250g, NOT 1 packet)
-Devanagari: एक=1 दो=2 तीन=3 चार=4 पाँच=5 छह=6 सात=7 आठ=8 नौ=9 दस=10
-Units:      किलो/kilo=kg, ग्राम/gram/gm=g, लीटर/ltr=litre, पैकेट/pkt=packet, बोतल/botal=bottle, पीस/pc=pc
+Brand abbreviations:
+  P-G/PG/parleg → Parle-G  (NEVER Britannia Pure Magic / Pure Gold)
+  magi/mggi → Maggi
+  A milk/amul → Amul (plain milk variant; NEVER Basundi/Lassi/Dahi/Butter/Ghee/Paneer)
 
-Common Hindi product words (translate first, then look up):
-  dudh/doodh/दूध      = milk         |  anda/ande/अंडा   = egg
-  namak/नमक           = salt         |  cheeni/चीनी       = sugar
-  chai/चाय            = tea          |  aata/atta/आटा    = wheat flour
-  chawal/चावल         = rice         |  dal/दाल           = lentils
-  haldi/हल्दी          = turmeric     |  mirchi/mirch      = chilli
-  dhaniya/धनिया       = coriander    |  jeera/जीरा        = cumin
-  sabun/साबुन         = soap         |  tel/तेल            = oil
-  paani/पानी          = water        |  biscuit/biskut    = biscuit
-  garam masala        = (literal)    |  ghee              = (literal)
+═══ FORBIDDEN MATCHES (real failures from prod) ═══
 
-Brand abbreviations / nicknames:
-  "magi" / "mggi"      → Maggi
-  "P-G" / "PG"         → Parle-G  — but only match if catalog actually contains Parle-G. Do NOT match Britannia Pure Magic, Britannia Pure Gold, etc.
-  "A milk" / "amul"    → Amul
-  "lal wala" / "red one" → match by colour only when catalog has a clear red variant; otherwise UNRECOGNISED.
+  P-G            → Britannia Pure Magic     ❌ wrong brand → if no Parle-G, UNRECOGNISED
+  5 anda         → Band-Aid Flexible        ❌ food ≠ medical → UNRECOGNISED
+  egg 6          → Band-Aid 10pc            ❌ food ≠ medical → UNRECOGNISED
+  haldi          → L'Oreal Hair Oil         ❌ spice ≠ hair oil → match Turmeric Powder if any
+  dhaniya patta  → B Natural Litchi Juice   ❌ herb ≠ juice → if no coriander, UNRECOGNISED
+  amul dudh      → Amul Basundi/Lassi/Dahi  ❌ plain milk ≠ flavoured dairy
+  Dettol soap    → Dettol Antiseptic Cream  ❌ soap ≠ cream
+  200g vim bar   → Vim qty=200              ❌ size as qty (qty must be 1)
+  namak 1 kg     → Salt + Atta + Sugar      ❌ ONE line = ONE match
+  tomato 1 kg    → Captain Cook Salt 1kg    ❌ tomato ≠ salt → UNRECOGNISED
+  any line       → product not in message   ❌ NEVER hallucinate
 
-═══ DEFAULTS ═══
+═══ POSITIVE EXAMPLES (DO match these) ═══
 
-- Quantity defaults to 1 when not specified.
-- "thoda/thodi" with no number → quantity is unclear; if the product is otherwise clear, qty=1; else UNRECOGNISED.
-- Fractional Hindi quantities ("aadha", "pao") describe SIZE, not qty. Treat them as a size preference, never as qty<1.
-  Example: "ek pao haldi" wants 250g of turmeric — match the catalog haldi/turmeric variant closest to 250g, with qty=1. If no haldi in catalog at all, UNRECOGNISED.
+  haldi / haldi powder / ek pao haldi / हल्दी
+      → "Turmeric" or "Haldi" product, qty=1
 
-═══ SIZE-VARIANT PREFERENCE ═══
+  ek kg aata / 1 kg atta / आटा
+      → any "Atta" product (Aashirvaad / Shakti / Nature Fresh), qty=1
+        Pick the closest size (1kg variant if available)
 
-When the customer specifies a size and the catalog has multiple variants of the same product:
-- Prefer the variant with the matching size.
-- If no exact size match, pick the closest size with qty=1.
-- Don't multiply qty to compensate (e.g., "200g vim bar" is NOT 2× of a 100g pack).
+  garam masala / garam masala 50g
+      → any "Garam Masala" product, qty=1 (the 50g is size, not qty)
 
-═══ WORKED EXAMPLE ═══
+  do bottle thums up / thums up 2
+      → any "Thums Up" product, qty=2
 
-Catalog (sample):
-[
-  { "id": "p1", "name": "Maggi Noodles 70g", "unit": "packet" },
-  { "id": "p2", "name": "Tata Salt 1kg",     "unit": "kg" },
-  { "id": "p3", "name": "Amul Milk 500ml",   "unit": "packet" },
-  { "id": "p4", "name": "Vim Bar 200g",      "unit": "bar" }
-]
-
-Customer: """
-Namaste, bhej dena -
-magi 3
-namak 1 kg
-amul dudh 1
-200g vim bar
-2 anda
-"""
-
-Correct output:
-{
-  "items": [
-    { "productId": "p1", "productName": "Maggi Noodles 70g", "qty": 3, "unit": "packet" },
-    { "productId": "p2", "productName": "Tata Salt 1kg",     "qty": 1, "unit": "kg" },
-    { "productId": "p3", "productName": "Amul Milk 500ml",   "qty": 1, "unit": "packet" },
-    { "productId": "p4", "productName": "Vim Bar 200g",      "qty": 1, "unit": "bar" }
-  ],
-  "unrecognised": [
-    { "originalLine": "2 anda", "qty": 2 }
-  ]
-}
-
-Note: "200g vim bar" → qty=1 (NOT 200). "2 anda" → unrecognised because no egg in catalog (NOT a wrong product).
-
-CATALOG (JSON, real product IDs only):
-${JSON.stringify(slimCatalog(catalog))}
+CATALOG (real product IDs only):
+${JSON.stringify(catalog)}
 
 CUSTOMER MESSAGE:
 """
 ${message}
 """
 
-Reply with ONLY valid JSON — no markdown, no explanation:
+Reply with ONLY valid JSON, no markdown, no explanation.
+Each entry MUST trace back to a literal line in the customer message.
 {
-  "items": [
-    { "productId": "<catalog id>", "productName": "<catalog name>", "qty": <number>, "unit": "<unit string or null>" }
-  ],
-  "unrecognised": [
-    { "originalLine": "<text that has no catalog match>", "qty": <number> }
-  ]
+  "items": [{ "productId": "<id>", "productName": "<name>", "qty": <number>, "unit": "<unit or null>" }],
+  "unrecognised": [{ "originalLine": "<exact text from message>", "qty": <number> }]
 }`
 }
 
