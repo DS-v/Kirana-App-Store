@@ -36,6 +36,21 @@ const useStore = create((set, get) => ({
     set({ shopName: trimmed })
   },
 
+  updateOwnerPhone: async (phone) => {
+    // Strip non-digits, accept blank to clear.
+    const digits = (phone || '').replace(/\D/g, '')
+    if (digits === get().ownerPhone) return
+    // Mirror to Supabase user_metadata so the number is restored on the next
+    // login (incognito / different device). We don't touch auth.phone — that
+    // would require a fresh OTP verification.
+    try {
+      const { default: supabase } = await import('../lib/supabase.js')
+      await supabase.auth.updateUser({ data: { owner_phone: digits } })
+    } catch {/* non-fatal */}
+    localStorage.setItem('kirana_phone', digits)
+    set({ ownerPhone: digits })
+  },
+
   logout: async () => {
     // Sign out from Supabase FIRST and await it. If we cleared local state first,
     // Auth would mount, see the still-live Supabase session, and jump to the

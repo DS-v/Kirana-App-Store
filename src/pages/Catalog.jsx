@@ -38,7 +38,11 @@ export default function Catalog() {
   const [search, setSearch]     = useState('')
   const [category, setCategory] = useState('All')
   const [sort, setSort]         = useState('az')
-  const [stockFilter, setStockFilter] = useState('all')
+  // /catalog?stock=oos pre-selects the Khatam filter (deep-link from Profile)
+  const [stockFilter, setStockFilter] = useState(
+    params.get('stock') === 'oos' ? 'oos' :
+    params.get('stock') === 'inStock' ? 'inStock' : 'all'
+  )
   const [showAdd, setShowAdd]     = useState(params.get('add') === '1')
   const [editId, setEditId]       = useState(null)
   const [showPaste, setShowPaste] = useState(false)

@@ -44,7 +44,8 @@ export default function Customers() {
 
   const [search, setSearch]     = useState('')
   const [sort, setSort]         = useState('udhaarDesc')
-  const [onlyUdhaar, setOnlyUdhaar] = useState(false)
+  // Pre-fill from query string: /customers?udhaar=1 turns the filter on
+  const [onlyUdhaar, setOnlyUdhaar] = useState(params.get('udhaar') === '1')
   const [showAdd, setShowAdd]   = useState(params.get('add') === '1')
   const [openId, setOpenId]     = useState(null)
   const [editing, setEditing]   = useState(null)        // { id, name, phone, notes }
