@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Search, X, Package, Edit2, Trash2, Upload, Mic } from 'lucide-react'
+import { Plus, Search, X, Package, Edit2, Trash2, Upload, Mic, MoreVertical } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import VoiceButton from '../components/VoiceButton'
@@ -286,9 +286,30 @@ export default function Catalog() {
               {form.inStock ? 'Stock me' : 'Khatam'}
             </button>
 
-            <button onClick={saveProduct} className="btn-primary py-3 text-sm">
-              {editId ? 'Save changes' : 'Catalog me add karein'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={saveProduct} className="btn-primary py-3 text-sm flex-1">
+                {editId ? 'Save changes' : 'Catalog me add karein'}
+              </button>
+              {editId && (
+                <button
+                  onClick={async () => {
+                    const ep = products.find(p => p.id === editId)
+                    if (!ep) return
+                    if (!window.confirm(`"${ep.name}" delete karein?`)) return
+                    try {
+                      await deleteProduct(ep.id)
+                      toast(`${ep.name} hata diya`, 'info')
+                      setEditId(null)
+                      setForm({ name: '', price: '', unit: 'packet', category: 'Other', inStock: true })
+                    } catch (e) { toast(e.message, 'error') }
+                  }}
+                  className="px-4 py-3 bg-red-50 text-red-600 rounded-2xl text-sm font-bold flex items-center gap-1.5 active:scale-95 transition-transform"
+                  title="Delete saamaan"
+                >
+                  <Trash2 size={15} /> Delete
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -360,7 +381,8 @@ function CompactVoiceButton({ onResult }) {
 }
 
 // ── Minimal product tile ─────────────────────────────────────────────────────
-// Just: name, price, unit, stock-toggle pill at bottom. Long-press → menu.
+// name + price up top, big stock toggle pill at bottom, ⋮ menu top-right
+// (also opens via long-press anywhere on the tile).
 function ProductTile({ product, onEdit, onDelete, onToggle }) {
   const longPressTimer = useRef(null)
   const [showMenu, setShowMenu] = useState(false)
@@ -383,7 +405,16 @@ function ProductTile({ product, onEdit, onDelete, onToggle }) {
       onTouchStart={handlePressStart}
       onTouchEnd={handlePressEnd}
     >
-      <div className="cursor-pointer" onClick={onEdit}>
+      {/* Kebab menu — always visible, the obvious way to delete */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setShowMenu(s => !s) }}
+        className="absolute top-1 right-1 w-7 h-7 flex items-center justify-center rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-50 transition-colors"
+        title="Edit / Delete"
+      >
+        <MoreVertical size={15} />
+      </button>
+
+      <div className="cursor-pointer pr-6" onClick={onEdit}>
         <p className="font-bold text-zinc-900 text-[13px] leading-snug line-clamp-2">{product.name}</p>
         <p className="text-base font-extrabold text-zinc-900 tabular-nums mt-1">
           ₹{product.price}
@@ -404,11 +435,11 @@ function ProductTile({ product, onEdit, onDelete, onToggle }) {
         {product.inStock ? 'Stock me' : 'Khatam'}
       </button>
 
-      {/* Long-press menu */}
+      {/* Action menu (kebab tap or long-press) */}
       {showMenu && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
-          <div className="absolute top-2 right-2 z-40 bg-white rounded-xl py-1.5 min-w-[120px]"
+          <div className="absolute top-8 right-2 z-40 bg-white rounded-xl py-1.5 min-w-[130px]"
                style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08)' }}>
             <button
               onClick={() => { setShowMenu(false); onEdit() }}
