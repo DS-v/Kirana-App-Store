@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle, Minus } from 'lucide-react'
+import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle, Minus, Search } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WAButton from '../components/WAButton'
@@ -408,6 +408,29 @@ export default function Orders() {
             onPhoneChange={val => setCustomerPhone(val)}
             onBlur={() => setTimeout(() => setShowCustDrop(false), 150)}
             onFocus={() => setShowCustDrop(true)}
+          />
+
+          {/* Search-and-add — tap a product to add to cart one at a time.
+              The bulk paths (voice / paste / image) below populate the same
+              cart en masse. Both feed into parsedItems. */}
+          <ProductSearchAdd
+            products={products}
+            onAdd={(p) => {
+              setParsedItems(items => {
+                const existing = items.findIndex(it => it.productId === p.id)
+                if (existing >= 0) {
+                  return items.map((it, i) => i === existing ? { ...it, qty: (it.qty || 1) + 1 } : it)
+                }
+                return [...items, {
+                  productId:   p.id,
+                  productName: p.name,
+                  qty:         1,
+                  unit:        p.unit || 'pc',
+                  price:       p.price ?? 0,
+                  inStock:     p.inStock ?? true,
+                }]
+              })
+            }}
           />
 
           {/* Voice input — speak the order directly */}
@@ -965,6 +988,79 @@ function SumCard({ icon, label, value, sub, color }) {
 }
 
 // ── Customer picker ────────────────────────────────────────────────────────────
+
+// Search the catalog and add one item at a time to the cart. Autocomplete
+// ranks by token overlap + substring — same approach as ItemSwap.
+function ProductSearchAdd({ products, onAdd }) {
+  const [q, setQ]       = useState('')
+  const [open, setOpen] = useState(false)
+
+  const matches = (() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return []
+    const ranked = products
+      .map(p => {
+        const hay = (p.name + ' ' + (p.aliases || []).join(' ')).toLowerCase()
+        const sub = hay.includes(term) ? 2 : 0
+        const tok = term.split(/\s+/).filter(Boolean).reduce((n, t) => n + (hay.includes(t) ? 1 : 0), 0)
+        return { p, score: sub * 3 + tok }
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name))
+      .slice(0, 8)
+      .map(({ p }) => p)
+    return ranked
+  })()
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1">
+        Saamaan add karein
+      </p>
+      <div className="relative">
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <input
+          className="input-field pl-10 text-sm"
+          placeholder="Naam likhke ek-ek karke add karein…"
+          value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+        />
+        {q && (
+          <button
+            onMouseDown={e => { e.preventDefault(); setQ(''); setOpen(false) }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+          >
+            <X size={14} />
+          </button>
+        )}
+
+        {open && matches.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl overflow-hidden z-30"
+               style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)' }}>
+            {matches.map(p => (
+              <button
+                key={p.id}
+                onMouseDown={e => { e.preventDefault(); onAdd(p); setQ(''); setOpen(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-50 active:bg-zinc-100 transition-colors border-b border-zinc-50 last:border-0"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-zinc-900 truncate">{p.name}</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    ₹{p.price} / {p.unit}
+                    {!p.inStock && <span className="ml-2 text-red-500 font-bold">Khatam</span>}
+                  </p>
+                </div>
+                <Plus size={14} className="text-emerald-500 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // Top 5 customers by last-order date, surfaced as one-tap chips so the
 // shopkeeper rarely has to type for repeat customers.
