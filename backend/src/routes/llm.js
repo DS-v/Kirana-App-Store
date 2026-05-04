@@ -258,7 +258,7 @@ For each product identify:
 - name: Full product name including brand and size variant (e.g. "Amul Butter 100g", "Parle-G Biscuit 200g")
 - price: Selling price / MRP as a plain number (0 if absent)
 - unit: ONE of exactly: kg, g, litre, ml, packet, pc, box, dozen, bar, bottle
-- category: ONE of exactly: Staples, Dairy, Biscuits, Snacks, Noodles, Beverages, Household, Other
+- category: ONE of exactly: Khaana, Snacks, Ghar, Other
 
 RULES:
 - Understand semantics: "P-G" = Parle-G, "Mggi" = Maggi, "A milk" = Amul Milk.
@@ -268,13 +268,10 @@ RULES:
 - If a line has no identifiable product name, skip it entirely.
 - Never include row numbers or index numbers in the name.
 - Category guide:
-  Staples: atta, flour, rice, dal, salt, sugar, oil, ghee, maida, besan, rava, poha
-  Dairy: milk, curd, butter, paneer, cheese, cream, amul, dahi, lassi
-  Biscuits: biscuit, parle-g, marie, bourbon, oreo, cookie, cracker, digestive
-  Noodles: maggi, noodles, pasta, yippee, top ramen
-  Snacks: chips, lays, kurkure, namkeen, bhujia, popcorn, mixture, peanuts
-  Beverages: tea, coffee, juice, cold drink, pepsi, coke, sprite, chai, horlicks, boost, bournvita
-  Household: soap, detergent, surf, vim, phenyl, rin, ariel, harpic, dettol, sanitizer, lizol
+  Khaana: groceries / food / drinks — atta, flour, rice, dal, salt, sugar, oil, ghee, milk, curd, butter, paneer, cheese, dahi, tea, coffee, juice, cold drink, pepsi, coke, sprite, chai, horlicks, boost, bournvita, masala, spice, sauce, jam, honey
+  Snacks: chips, lays, kurkure, namkeen, bhujia, popcorn, mixture, peanuts, biscuit, parle-g, marie, oreo, cookie, cracker, maggi, noodles, pasta, yippee, chocolate, kitkat, dairy milk
+  Ghar: household / personal care — soap, detergent, surf, vim, phenyl, rin, harpic, dettol, sanitizer, shampoo, toothpaste, brush, candle, agarbatti
+  Other: anything that does not clearly fit
 
 CONTENT:
 """
@@ -299,19 +296,16 @@ For each product:
 - name: Full name including brand and size (e.g. "Amul Butter 100g")
 - price: Selling price as a number (0 if not readable)
 - unit: ONE of: kg, g, litre, ml, packet, pc, box, dozen, bar, bottle
-- category: ONE of: Staples, Dairy, Biscuits, Snacks, Noodles, Beverages, Household, Other
+- category: ONE of: Khaana, Snacks, Ghar, Other
 
 RULES:
 - Size like "500g" or "1kg" is part of the product name, NOT the price.
 - SKIP: serial numbers, column headers, totals, GST lines, dates, addresses.
 - Category guide:
-  Staples: atta, flour, rice, dal, salt, sugar, oil, ghee
-  Dairy: milk, curd, butter, paneer, amul, dahi
-  Biscuits: biscuit, parle-g, marie, oreo, cookie
-  Noodles: maggi, noodles, pasta, yippee
-  Snacks: chips, lays, kurkure, namkeen, bhujia
-  Beverages: tea, coffee, juice, pepsi, coke, horlicks, bournvita
-  Household: soap, detergent, surf, vim, dettol, harpic
+  Khaana: groceries / food / drinks — atta, flour, rice, dal, salt, sugar, oil, ghee, milk, curd, butter, paneer, dahi, tea, coffee, juice, pepsi, coke, horlicks, bournvita, masala
+  Snacks: chips, lays, kurkure, namkeen, bhujia, biscuit, parle-g, marie, oreo, cookie, maggi, noodles, pasta, yippee, chocolate
+  Ghar: household / personal care — soap, detergent, surf, vim, dettol, harpic, shampoo, toothpaste
+  Other: anything else
 
 Reply with ONLY valid JSON — no markdown:
 { "products": [ { "name": "...", "price": 0, "unit": "packet", "category": "Other" } ] }`
@@ -320,7 +314,7 @@ Reply with ONLY valid JSON — no markdown:
 // ── Catalog: validate response ────────────────────────────────────────────────
 
 const VALID_UNITS = ['kg','g','litre','ml','packet','pc','box','dozen','bar','bottle']
-const VALID_CATS  = ['Staples','Dairy','Biscuits','Snacks','Noodles','Beverages','Household','Other']
+const VALID_CATS  = ['Khaana','Snacks','Ghar','Other']
 
 function validateCatalog(obj) {
   if (!obj || !Array.isArray(obj.products)) throw new Error('LLM returned unexpected shape')
