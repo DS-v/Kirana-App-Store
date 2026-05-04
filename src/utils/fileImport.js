@@ -21,7 +21,9 @@
  *   { type: 'image',    data: {imageBase64,mimeType,dataUrl} }      ← images
  */
 
-export const CATEGORIES = ['Staples', 'Dairy', 'Biscuits', 'Snacks', 'Noodles', 'Beverages', 'Household', 'Other']
+// Broad categories — kept short for kirana shopkeepers.
+// Khaana = food/drinks/groceries · Snacks = chips/biscuits/noodles · Ghar = household
+export const CATEGORIES = ['Khaana', 'Snacks', 'Ghar', 'Other']
 export const IMAGE_EXTS  = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'tiff', 'tif']
 
 // ── Excel helpers (still used directly) ──────────────────────────────────────
@@ -37,27 +39,70 @@ const UNIT_MAP = {
 }
 
 const CATEGORY_KEYWORDS = {
-  Dairy:     ['milk', 'curd', 'butter', 'paneer', 'ghee', 'cheese', 'cream', 'lassi', 'amul', 'dahi'],
-  Staples:   ['atta', 'flour', 'rice', 'dal', 'salt', 'sugar', 'oil', 'rava', 'maida', 'besan', 'poha', 'suji'],
-  Biscuits:  ['biscuit', 'parle', 'marie', 'bourbon', 'oreo', 'digestive', 'crackers', 'cookie'],
-  Noodles:   ['maggi', 'noodle', 'pasta', 'yippee', 'top ramen'],
-  Snacks:    ['chips', 'lays', 'kurkure', 'namkeen', 'bhujia', 'popcorn', 'nachos', 'peanut', 'mixture'],
-  Beverages: ['tea', 'coffee', 'juice', 'drink', 'cold drink', 'pepsi', 'coke', 'sprite', 'chai', 'horlicks', 'boost', 'bournvita'],
-  Household: ['soap', 'detergent', 'surf', 'vim', 'phenyl', 'broom', 'rin', 'ariel', 'harpic', 'sanitizer', 'dettol', 'lizol'],
+  Snacks: [
+    'chips','lays','kurkure','namkeen','bhujia','popcorn','nachos','peanut','mixture',
+    'biscuit','parle','marie','bourbon','oreo','digestive','crackers','cookie',
+    'maggi','noodle','pasta','yippee','top ramen','chocolate','kitkat','dairy milk','munch','5 star',
+  ],
+  Ghar: [
+    'soap','detergent','surf','vim','phenyl','broom','rin','ariel','harpic','sanitizer','dettol','lizol',
+    'shampoo','toothpaste','toothbrush','colgate','tissue','napkin','bulb','battery','matchbox','agarbatti','candle',
+  ],
+  Khaana: [
+    'milk','curd','butter','paneer','ghee','cheese','cream','lassi','amul','dahi',
+    'atta','flour','rice','dal','salt','sugar','oil','rava','maida','besan','poha','suji',
+    'tea','coffee','juice','drink','cold drink','pepsi','coke','sprite','chai','horlicks','boost','bournvita',
+    'honey','jam','sauce','ketchup','pickle','achar','masala','spice',
+  ],
 }
 
-function guessCategory(name) {
+export function guessCategory(name) {
   const n = name.toLowerCase()
   for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS))
     if (kws.some(k => n.includes(k))) return cat
   return 'Other'
 }
 
-function guessUnit(text) {
+export function guessUnit(text) {
   const t = text.toLowerCase()
   for (const [k, v] of Object.entries(UNIT_MAP))
     if (new RegExp(`\\b${k}\\b`).test(t)) return v
   return 'packet'
+}
+
+/**
+ * parsePastedCatalog(text)
+ *
+ * Extracts product rows from a free-form pasted blob (one per line):
+ *   "Parle-G 10"
+ *   "Maggi Noodles 14 packet"
+ *   "Amul Milk 500ml @ 28"
+ *   "Surf Excel 200g, ₹45"
+ *
+ * Returns Array<{name, price, unit, category, inStock:true}>
+ */
+export function parsePastedCatalog(text) {
+  if (!text || !text.trim()) return []
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean)
+  const rows = []
+  for (const raw of lines) {
+    // Strip currency markers
+    const clean = raw.replace(/[₹]/g, '').replace(/\b(rs|rupees?)\b/gi, '')
+    // Grab the LAST integer/decimal as price (price is almost always last)
+    const m = clean.match(/(.*?)([0-9]+(?:\.[0-9]+)?)\s*$/)
+    if (!m) continue
+    let name = m[1].replace(/[-:,@]+\s*$/, '').trim()
+    const price = parseFloat(m[2])
+    if (!name || isNaN(price)) continue
+    rows.push({
+      name,
+      price,
+      unit: guessUnit(raw),
+      category: guessCategory(name),
+      inStock: true,
+    })
+  }
+  return rows
 }
 
 const NAME_HEADERS  = ['name', 'product', 'item', 'description', 'product name', 'item name', 'particulars', 'goods', 'article']
