@@ -33,5 +33,13 @@
   {"id":"oreo","name":"Cadbury Oreo 120g","unit":"packet"},
   {"id":"lays","name":"Lay's Magic Masala 73g","unit":"packet","aliases":["lays","chips"]},
   {"id":"5star","name":"5 Star 40g","unit":"pc"},
-  {"id":"red-chilli","name":"Catch Red Chilli Powder 100g","unit":"g","aliases":["mirch","chilli"]}
+  {"id":"red-chilli","name":"Catch Red Chilli Powder 100g","unit":"g","aliases":["mirch","chilli"]},
+  {"id":"hns-100","name":"Hide & Seek 100g","unit":"packet","aliases":["hide and seek","hide n seek"]},
+  {"id":"amul-butter-50","name":"Amul Butter 50g","unit":"g","aliases":["chhota butter"]},
+  {"id":"kurkure-90","name":"Kurkure Masala Munch 90g","unit":"packet"},
+  {"id":"coke-300","name":"Coca Cola 300ml","unit":"ml","aliases":["chhota coke","coke chhota"]},
+  {"id":"coke-2l","name":"Coca Cola 2L","unit":"litre","aliases":["bada coke"]},
+  {"id":"basmati-5k","name":"India Gate Basmati 5kg","unit":"kg"},
+  {"id":"amul-ghee-1l","name":"Amul Ghee 1L","unit":"litre"},
+  {"id":"lays-52","name":"Lay's American Style 52g","unit":"packet"}
 ]

@@ -16,7 +16,9 @@ const promptFile = process.argv[2] || 'prompt-v2.mjs'
 const onlyFilter = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null
 
 const { buildTextPrompt } = await import(pathToFileURL(path.join(__dirname, promptFile)).href)
-const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8'))
+const catalogFile = process.env.CATALOG || 'catalog.json'
+const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, catalogFile), 'utf8'))
+console.log(`catalog: ${catalogFile} (${catalog.length} products)`)
 
 const PROVIDER = process.env.PROVIDER || 'gemini'   // gemini | groq
 const GROQ_KEY   = process.env.GROQ_API_KEY

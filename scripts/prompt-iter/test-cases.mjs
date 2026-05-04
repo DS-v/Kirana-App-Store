@@ -161,6 +161,48 @@ chicken 1 kg`,
   },
 
   {
+    name: 'hard edges — decimals, ranges, attached numbers, conditionals',
+    message: `Hello bhaiya 🙏
+
+aadha kilo cheeni
+1.5 kg basmati chawal
+3packet maggi
+amul ghee 500ml aur 1L dono ek ek
+amool butter chhota wala
+2-3 packet kurkure
+🥛 dudh 2 packet
+do bottle coke chhota
+agar oreo nahi hai toh hide n seek de dena
+
+abhi 500 hai, baaki kal`,
+    expect: [
+      // aadha = SIZE hint (½ kg). qty must be 1, NOT 0.5.
+      { line: 'cheeni',  matched: true, names: ['Sugar'], qty: 1, qtyForbid: [0, 0.5] },
+      // decimal qty is rare but legitimate — 1.5 kg means 1.5 packets if 1kg variant or 1 of 5kg
+      // Either qty=1 (closest 5kg variant) or qty=2 (round up of 1kg). Forbid wildly wrong nums.
+      { line: 'basmati', matched: true, names: ['Basmati'], qtyForbid: [0, 100, 150] },
+      // "3packet maggi" — no space. qty=3
+      { line: 'maggi',   matched: true, names: ['Maggi'], qty: 3 },
+      // "amul ghee 500ml aur 1L dono ek ek" — TWO matches, qty 1 each (one per variant)
+      { line: 'amul ghee', matched: true, names: ['Amul Ghee'] },
+      // "amool butter chhota" — misspelling + size hint. Should match Amul Butter 50g (chhota wala).
+      { line: 'butter',  matched: true, names: ['Butter'], qty: 1 },
+      // "2-3 packet kurkure" — range. qty 2 or 3 acceptable, NOT 0 or 23.
+      { line: 'kurkure', matched: true, names: ['Kurkure'], qtyForbid: [0, 23] },
+      // emoji prefix
+      { line: 'dudh',    matched: true, names: ['Milk'], qty: 2,
+        forbid: ['Basundi', 'Lassi', 'Dahi'] },
+      // "do bottle coke chhota" — qty=2 of the 300ml/chhota variant, NOT 2L
+      { line: 'coke',    matched: true, names: ['Coca Cola'], qty: 2 },
+      // conditional: oreo nahi → hide n seek. Either oreo (default) or hide n seek (if not avail).
+      // Both Oreo and Hide & Seek are in catalog, so Oreo is preferred (default branch).
+      { line: 'oreo',    matched: true, names: ['Oreo', 'Hide'], qty: 1 },
+      // payment promise must NOT appear
+      { absent: ['500', 'baaki', 'abhi'] },
+    ],
+  },
+
+  {
     name: 'compound and ambiguous',
     message: `2 amul ghee aur 1 kg cheeni
 biscuit 1 packet
