@@ -1,8 +1,13 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import shopRoutes     from './routes/shops.js'
+import productRoutes  from './routes/products.js'
+import customerRoutes from './routes/customers.js'
+import orderRoutes    from './routes/orders.js'
+import llmRoutes      from './routes/llm.js'
 
-// ── env validation — fail fast with a clear message ───────────────────────────
+// ── env validation ────────────────────────────────────────────────────────────
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']
 const missing = REQUIRED_ENV.filter(k => !process.env[k])
 if (missing.length) {
@@ -11,17 +16,9 @@ if (missing.length) {
   process.exit(1)
 }
 
-import shopRoutes      from './routes/shops.js'
-import productRoutes   from './routes/products.js'
-import customerRoutes  from './routes/customers.js'
-import orderRoutes     from './routes/orders.js'
-import llmRoutes       from './routes/llm.js'
-
 const app = express()
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// We use Bearer tokens (not cookies), so credentials:false works with wildcard.
-// Set FRONTEND_URL in Railway if you want to restrict to a specific origin.
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
   credentials: false,
@@ -38,14 +35,13 @@ app.use('/api/customers', customerRoutes)
 app.use('/api/orders',    orderRoutes)
 app.use('/api/llm',       llmRoutes)
 
-// ── WhatsApp routes (optional — requires whatsapp-web.js + Chromium) ──────────
-// Loaded dynamically so a missing/broken puppeteer install doesn't crash the server.
+// ── WhatsApp routes (optional — only available if whatsapp-web.js is installed)
 try {
   const { default: whatsappRoutes } = await import('./routes/whatsapp.js')
   app.use('/api/whatsapp', whatsappRoutes)
   console.log('[startup] WhatsApp routes loaded')
 } catch (err) {
-  console.warn('[startup] WhatsApp routes skipped:', err.message)
+  console.warn('[startup] WhatsApp routes skipped (install whatsapp-web.js to enable):', err.message)
   app.use('/api/whatsapp', (_req, res) =>
     res.status(503).json({ error: 'WhatsApp integration not available on this server' })
   )
