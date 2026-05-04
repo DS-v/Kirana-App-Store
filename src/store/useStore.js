@@ -26,6 +26,8 @@ const useStore = create((set, get) => ({
   logout: () => {
     ['kirana_token','kirana_shop_id','kirana_shop_name','kirana_phone'].forEach(k => localStorage.removeItem(k))
     set({ token: null, shopId: null, shopName: '', ownerPhone: '' })
+    // Sign out from Supabase so Auth component doesn't detect a live session on next render
+    import('../lib/supabase.js').then(({ default: supabase }) => supabase.auth.signOut())
   },
 
   // ── loading / error ────────────────────────────────────────────────────────
