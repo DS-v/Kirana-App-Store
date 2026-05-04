@@ -10,6 +10,8 @@ import ImageOrderScanner from '../components/ImageOrderScanner'
 import { parseOrderMessage, orderTotal } from '../utils/orderParser'
 import { STATUSES, STATUS_LABEL, STATUS_BADGE, STATUS_COLOR, STATUS_DOT, nextStatusOf, statusAdvanceToast } from '../utils/orderStatus'
 import SwipeableRow from '../components/SwipeableRow'
+import BottomSheet from '../components/BottomSheet'
+import { guessCategory, guessUnit } from '../utils/fileImport'
 import supabase from '../lib/supabase'
 import { format, startOfWeek, startOfMonth } from 'date-fns'
 import {
@@ -40,6 +42,7 @@ export default function Orders() {
   const shopName    = useStore(s => s.shopName)
   const ownerPhone  = useStore(s => s.ownerPhone)
   const addOrder    = useStore(s => s.addOrder)
+  const addProduct  = useStore(s => s.addProduct)
   const updateOrder = useStore(s => s.updateOrder)
   const deleteOrder = useStore(s => s.deleteOrder)
   const addUdhaar   = useStore(s => s.addUdhaar)
@@ -339,21 +342,14 @@ export default function Orders() {
       {/* Path B: auto-ingested WhatsApp messages — tap to open as order */}
       <IncomingMessageBanner onOpen={handleIncomingOpen} />
 
-      {/* New order panel */}
-      {showNew && (
-        <div className="card-elevated space-y-4 animate-slide-up">
-          <div className="flex items-center justify-between">
-            <p className="font-bold text-zinc-900 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
-                <MessageSquare size={14} className="text-emerald-600" />
-              </span>
-              Naya Order
-            </p>
-            <button onClick={() => setShowNew(false)} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors">
-              <X size={16} />
-            </button>
-          </div>
-
+      {/* New order — bottom sheet so it opens over the list at any scroll pos */}
+      <BottomSheet
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        title="Naya Order"
+        maxHeight="92vh"
+      >
+        <div className="space-y-4">
           {/* ── Customer picker ─────────────────────────────────────────── */}
           <CustomerPicker
             customers={customers}
@@ -465,10 +461,46 @@ export default function Orders() {
               ))}
 
               {unrecognised.map((u, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-amber-50 rounded-xl px-3 py-2.5">
-                  <AlertCircle size={15} className="text-amber-400 flex-shrink-0" />
-                  <p className="text-xs text-zinc-600">"{u.originalLine}" — not in catalog</p>
-                </div>
+                <UnrecognisedItem
+                  key={idx}
+                  item={u}
+                  onAddToCatalog={async (name, price) => {
+                    try {
+                      const product = await addProduct({
+                        name,
+                        price,
+                        unit: guessUnit(name),
+                        category: guessCategory(name),
+                        inStock: true,
+                        aliases: [],
+                      })
+                      // Move into parsed items so the user sees their order updated
+                      setParsedItems(p => [...p, {
+                        productId:   product.id,
+                        productName: product.name,
+                        qty:         u.qty || 1,
+                        unit:        product.unit,
+                        price:       product.price,
+                        inStock:     true,
+                      }])
+                      setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                      toast(`${product.name} catalog me jud gaya`, 'success')
+                    } catch (e) { toast(e.message, 'error') }
+                  }}
+                  onAddOneOff={(name, price, qty) => {
+                    // Add as line item without persisting to catalog.
+                    setParsedItems(p => [...p, {
+                      productId:   null,
+                      productName: name,
+                      qty:         qty || 1,
+                      unit:        guessUnit(name) || 'pc',
+                      price,
+                      inStock:     true,
+                    }])
+                    setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                  }}
+                  onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
+                />
               ))}
 
               <div className="flex justify-between items-center bg-zinc-50 rounded-xl px-4 py-3">
@@ -481,23 +513,25 @@ export default function Orders() {
                 <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 hover:!bg-red-100" />
               )}
 
-              {/* Confirm / Credit */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button onClick={() => confirmOrder('confirmed')} className="btn-primary py-3 text-sm flex items-center justify-center gap-1.5">
-                  <Check size={15} /> Confirm
-                </button>
-                <button onClick={() => confirmOrder('credit')} className="btn-secondary py-3 text-sm">
-                  Credit / Udhaar
-                </button>
+              {/* Confirm / Udhaar — sticky to bottom of sheet so they're
+                  always reachable even with a long item list */}
+              <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-zinc-100 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => confirmOrder('delivered')} className="btn-primary py-3 text-sm flex items-center justify-center gap-1.5">
+                    <Check size={15} /> De diya
+                  </button>
+                  <button onClick={() => confirmOrder('credit')} className="btn-secondary py-3 text-sm">
+                    Udhaar
+                  </button>
+                </div>
+                <p className="text-[11px] text-zinc-400 text-center">
+                  WhatsApp pe receipt khulegi
+                </p>
               </div>
-
-              <p className="text-[11px] text-zinc-400 text-center">
-                Confirming will open WhatsApp to send the customer a receipt
-              </p>
             </div>
           )}
         </div>
-      )}
+      </BottomSheet>
 
       {/* Filter tab bar */}
       <div className="seg-bar">
@@ -696,6 +730,93 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
       )}
     </div>
     </SwipeableRow>
+  )
+}
+
+// ── Unrecognised line-item recovery ─────────────────────────────────────────
+// Shown when the parser couldn't match a pasted/voice line to any catalog
+// product. Three exits: add to catalog (persists), add one-off (just this
+// order), or skip. Inline so the shopkeeper never has to leave the order.
+function UnrecognisedItem({ item, onAddToCatalog, onAddOneOff, onSkip }) {
+  const [open, setOpen]   = useState(false)
+  const [name, setName]   = useState(item.productName || item.originalLine || '')
+  const [price, setPrice] = useState('')
+  const [qty, setQty]     = useState(item.qty || 1)
+
+  const numPrice = parseFloat(price) || 0
+  const valid    = name.trim().length > 0 && numPrice > 0
+
+  return (
+    <div className="bg-amber-50 rounded-xl p-3 space-y-2 animate-fade-up">
+      <div className="flex items-center gap-2">
+        <AlertCircle size={15} className="text-amber-500 flex-shrink-0" />
+        <p className="text-xs font-semibold text-zinc-700 flex-1 truncate">
+          "{item.originalLine || item.productName}" — catalog me nahi hai
+        </p>
+        {!open && (
+          <button
+            onClick={() => setOpen(true)}
+            className="text-[11px] font-bold text-emerald-600 px-2 py-1 rounded-lg hover:bg-emerald-50"
+          >
+            Fix karein
+          </button>
+        )}
+        <button
+          onClick={onSkip}
+          className="text-[11px] font-bold text-zinc-400 px-2 py-1 rounded-lg hover:bg-zinc-100"
+          title="Hata do"
+        >
+          Skip
+        </button>
+      </div>
+
+      {open && (
+        <>
+          <div className="grid grid-cols-[1fr_70px_60px] gap-2">
+            <input
+              className="input-field py-1.5 text-sm"
+              placeholder="Product naam"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              className="input-field py-1.5 text-sm"
+              placeholder="₹ price"
+              value={price}
+              onChange={e => setPrice(e.target.value)}
+              autoFocus
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              className="input-field py-1.5 text-sm text-center"
+              placeholder="Qty"
+              value={qty}
+              onChange={e => setQty(parseFloat(e.target.value) || 1)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => valid && onAddToCatalog(name.trim(), numPrice, qty)}
+              disabled={!valid}
+              className="py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+            >
+              Catalog me add karein
+            </button>
+            <button
+              onClick={() => valid && onAddOneOff(name.trim(), numPrice, qty)}
+              disabled={!valid}
+              className="py-2 bg-white border border-zinc-200 text-zinc-600 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+              title="Sirf is order ke liye, catalog me save nahi hoga"
+            >
+              Sirf is order ke liye
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
