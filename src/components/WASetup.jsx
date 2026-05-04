@@ -10,22 +10,44 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Wifi, WifiOff, RefreshCw, CheckCircle } from 'lucide-react'
+import { Wifi, WifiOff, RefreshCw, CheckCircle, MessageSquare } from 'lucide-react'
 import { api } from '../api/client'
+
+// Wrapper that re-creates the "WHATSAPP" section label that used to live in
+// Dashboard. Owning the label here means the entire section disappears
+// cleanly when WhatsApp isn't available on this backend.
+function Section({ children }) {
+  return (
+    <div className="space-y-2">
+      <p className="section-label px-1 flex items-center gap-1.5">
+        <MessageSquare size={11} /> WhatsApp
+      </p>
+      {children}
+    </div>
+  )
+}
 
 const POLL_INTERVAL = 3000   // poll status every 3 s while waiting for QR scan
 
+// Backend returns this exact message when whatsapp-web.js failed to load
+// (Railway's container doesn't ship headless Chromium). We don't want to
+// nag the shopkeeper with "WhatsApp setup failed" — just hide the section.
+const UNAVAILABLE_MSG = 'WhatsApp integration not available on this server'
+
 export default function WASetup() {
-  const [phase, setPhase]   = useState('idle')   // idle | loading | qr | connected | error
+  const [phase, setPhase]   = useState('idle')   // idle | loading | qr | connected | error | unavailable
   const [qrSrc, setQrSrc]   = useState(null)
   const [errMsg, setErrMsg] = useState('')
   const timerRef            = useRef(null)
 
   useEffect(() => {
-    // Check if already connected on mount
+    // Check on mount whether WhatsApp is supported AND already connected.
     api.get('/api/whatsapp/status')
-      .then(s => { if (s.connected) setPhase('connected') })
-      .catch(() => { /* backend not running — ignore */ })
+      .then(s => { if (s?.connected) setPhase('connected') })
+      .catch(e => {
+        if (e?.message?.includes(UNAVAILABLE_MSG)) setPhase('unavailable')
+        // any other error: stay idle so the user can still try
+      })
 
     return () => clearInterval(timerRef.current)
   }, [])
@@ -35,6 +57,12 @@ export default function WASetup() {
     try {
       await api.post('/api/whatsapp/setup', {})
     } catch (e) {
+      // 503 with this exact message = backend can't run WhatsApp at all,
+      // so collapse the section instead of showing a scary red error.
+      if (e?.message?.includes(UNAVAILABLE_MSG)) {
+        setPhase('unavailable')
+        return
+      }
       setErrMsg(e.message)
       setPhase('error')
       return
@@ -59,8 +87,14 @@ export default function WASetup() {
     }, POLL_INTERVAL)
   }
 
+  // WhatsApp module isn't running on this backend — render nothing so the
+  // shopkeeper isn't presented with a feature they can't use. The Profile
+  // page handles the empty render gracefully.
+  if (phase === 'unavailable') return null
+
   if (phase === 'connected') {
     return (
+      <Section>
       <div className="card flex items-center gap-3 border-emerald-100 bg-emerald-50/40">
         <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
           <Wifi size={16} className="text-emerald-600" />
@@ -71,11 +105,13 @@ export default function WASetup() {
         </div>
         <CheckCircle size={18} className="text-emerald-500 flex-shrink-0" />
       </div>
+      </Section>
     )
   }
 
   if (phase === 'qr') {
     return (
+      <Section>
       <div className="card space-y-3 border-emerald-100">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
@@ -98,11 +134,13 @@ export default function WASetup() {
           Waiting for scan…
         </p>
       </div>
+      </Section>
     )
   }
 
   if (phase === 'loading') {
     return (
+      <Section>
       <div className="card flex items-center gap-3 border-zinc-100">
         <RefreshCw size={18} className="text-emerald-500 animate-spin flex-shrink-0" />
         <div>
@@ -110,11 +148,13 @@ export default function WASetup() {
           <p className="text-xs text-zinc-400 mt-0.5">QR code will appear in a moment</p>
         </div>
       </div>
+      </Section>
     )
   }
 
   if (phase === 'error') {
     return (
+      <Section>
       <div className="card space-y-2 border-red-100 bg-red-50/30">
         <div className="flex items-center gap-2">
           <WifiOff size={16} className="text-red-400" />
@@ -125,11 +165,13 @@ export default function WASetup() {
           Retry
         </button>
       </div>
+      </Section>
     )
   }
 
   // idle
   return (
+    <Section>
     <div className="card space-y-3 border-dashed">
       <div className="flex items-center gap-2">
         <div className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center flex-shrink-0">
@@ -144,5 +186,6 @@ export default function WASetup() {
         Enable Auto-Ingestion
       </button>
     </div>
+    </Section>
   )
 }

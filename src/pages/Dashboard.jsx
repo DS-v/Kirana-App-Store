@@ -25,7 +25,19 @@ export default function Dashboard() {
   const debtors  = customers.filter(c => (c.udhaar || 0) > 0)
                             .sort((a,b) => (b.udhaar||0) - (a.udhaar||0))
   const totalDue = debtors.reduce((s,c) => s + (c.udhaar || 0), 0)
-  const oosItems = products.filter(p => !p.inStock)
+  // Dedupe by name (case-insensitive) — the catalog can legitimately contain
+  // duplicates from past imports, but the at-a-glance "Khatam Saamaan" tile
+  // should show each item once.
+  const oosItems = (() => {
+    const seen = new Set()
+    return products.filter(p => {
+      if (p.inStock) return false
+      const key = (p.name || '').trim().toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  })()
 
   function handleEditShopName() {
     const next = window.prompt('Shop ka naam edit karein', shopName || '')
@@ -138,13 +150,12 @@ export default function Dashboard() {
           </button>
         )}
 
-        {/* WhatsApp — single source of truth: connected state lives here */}
-        <div className="space-y-2">
-          <p className="section-label px-1 flex items-center gap-1.5">
-            <MessageSquare size={11} /> WhatsApp
-          </p>
-          <WASetup />
-        </div>
+        {/* WhatsApp — single source of truth: connected state lives here.
+            WASetup renders <section label + card> together so when the
+            backend can't run WhatsApp at all, the entire section disappears
+            instead of leaving an orphan "WHATSAPP" header above nothing. */}
+        <WASetup />
+
 
         {/* Account / Logout */}
         <div className="space-y-2">
