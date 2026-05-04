@@ -94,9 +94,10 @@
   .btn-secondary:active { background-color: theme('colors.cream.50'); }
 
   .btn-ghost {
-    @apply font-semibold py-2 px-3 rounded-xl text-sm
-           active:scale-[0.97] transition-[transform,background-color,color] duration-150;
+    @apply font-semibold py-2 px-3 rounded-xl text-sm active:scale-[0.97];
     color: theme('colors.ink.400');
+    transition-property: transform, background-color, color;
+    transition-duration: 150ms;
   }
   .btn-ghost:hover {
     background-color: theme('colors.cream.100');
@@ -132,11 +133,12 @@
   /* ── Inputs ──────────────────────────────────────────── */
   .input-field {
     @apply w-full border rounded-xl px-4 py-3 text-sm
-           focus:outline-none focus:ring-2
-           transition-[border-color,box-shadow,background-color] duration-150;
+           focus:outline-none focus:ring-2;
     color: theme('colors.ink.700');
     border-color: theme('colors.cream.200');
     background-color: #FCFAF4;
+    transition-property: border-color, box-shadow, background-color;
+    transition-duration: 150ms;
   }
   .input-field::placeholder { color: theme('colors.ink.300'); }
   .input-field:focus {
@@ -153,41 +155,55 @@
     letter-spacing: 0.06em;
   }
 
-  /* ── Status badges (Hinglish-friendly) ───────────────── */
+  /* ── Status badges (Hinglish-friendly) ─────────────────
+     NOTE: avoid `@apply` of custom classes (badge) and avoid ring-* with
+     theme() colors — both are unreliable. Inline everything as plain CSS. */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
     letter-spacing: 0.01em;
+    line-height: 1.4;
+    border: 1px solid transparent;
   }
   .status-confirmed {
-    @apply badge ring-1;
-    background-color: theme('colors.kirana.50');
-    color: theme('colors.kirana.700');
-    --tw-ring-color: theme('colors.kirana.100');
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 9999px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background-color: #ecfdf5; color: #047857; border: 1px solid #d1fae5;
   }
   .status-pending {
-    @apply badge ring-1;
-    background-color: theme('colors.saffron.100');
-    color: theme('colors.saffron.700');
-    --tw-ring-color: theme('colors.saffron.200');
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 9999px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background-color: #FEEFCB; color: #A95B00; border: 1px solid #FDDDA0;
   }
-  .status-packed   { @apply badge bg-sky-50 text-sky-700 ring-1 ring-sky-100; }
+  .status-packed {
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 9999px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background-color: #f0f9ff; color: #0369a1; border: 1px solid #e0f2fe;
+  }
   .status-delivered {
-    @apply badge ring-1;
-    background-color: theme('colors.kirana.100');
-    color: theme('colors.kirana.800');
-    --tw-ring-color: theme('colors.kirana.200');
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 9999px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;
   }
   .status-credit {
-    @apply badge ring-1;
-    background-color: theme('colors.khaata.50');
-    color: theme('colors.khaata.700');
-    --tw-ring-color: theme('colors.khaata.100');
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 9999px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background-color: #FCF1F2; color: #6B2030; border: 1px solid #F8DCE0;
   }
   .status-cancelled {
-    @apply badge ring-1;
-    background-color: theme('colors.ink.50');
-    color: theme('colors.ink.400');
-    --tw-ring-color: theme('colors.ink.100');
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 9999px;
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    background-color: #F5F2EE; color: #6E6253; border: 1px solid #E8E2D9;
   }
 
   /* ── Section label ───────────────────────────────────── */
@@ -205,10 +221,11 @@
   }
   .seg-bar::-webkit-scrollbar { display: none; }
   .seg-item {
-    @apply flex-shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-semibold
-           transition-[background-color,color,box-shadow] duration-150 whitespace-nowrap;
+    @apply flex-shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-semibold whitespace-nowrap;
     color: theme('colors.ink.400');
     min-height: 36px;
+    transition-property: background-color, color, box-shadow;
+    transition-duration: 150ms;
   }
   .seg-item-active {
     @apply bg-white;
