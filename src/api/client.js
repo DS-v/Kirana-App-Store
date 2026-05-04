@@ -1,4 +1,11 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// Normalise the API URL: add https:// if no protocol is specified
+// (guards against Railway env var set as "foo.up.railway.app" without https://)
+function normaliseBase(url) {
+  if (!url) return 'http://localhost:3001'
+  if (/^https?:\/\//i.test(url)) return url.replace(/\/$/, '')
+  return `https://${url.replace(/\/$/, '')}`
+}
+const BASE = normaliseBase(import.meta.env.VITE_API_URL)
 
 async function request(method, path, body) {
   const token = localStorage.getItem('kirana_token')
