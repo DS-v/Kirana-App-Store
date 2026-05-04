@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ShoppingBag, Package, Users, TrendingUp, AlertTriangle, LogOut, ChevronRight, Zap } from 'lucide-react'
+import { ShoppingBag, Package, Users, TrendingUp, AlertTriangle, LogOut, ChevronRight, Zap, Pencil } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WASetup from '../components/WASetup'
@@ -15,12 +15,24 @@ const STATUS_DOT = {
 }
 
 export default function Dashboard() {
-  const shopName  = useStore(s => s.shopName)
-  const orders    = useStore(s => s.orders)
-  const products  = useStore(s => s.products)
-  const customers = useStore(s => s.customers)
-  const logout    = useStore(s => s.logout)
+  const shopName       = useStore(s => s.shopName)
+  const orders         = useStore(s => s.orders)
+  const products       = useStore(s => s.products)
+  const customers      = useStore(s => s.customers)
+  const logout         = useStore(s => s.logout)
+  const updateShopName = useStore(s => s.updateShopName)
+  const toast          = useToast()
   const nav = useNavigate()
+
+  function handleEditShopName() {
+    const next = window.prompt('Edit shop name', shopName || '')
+    if (next == null) return
+    const trimmed = next.trim()
+    if (!trimmed) return toast('Shop name cannot be empty', 'error')
+    if (trimmed === shopName) return
+    updateShopName(trimmed)
+    toast('Shop name updated', 'success')
+  }
 
   const today       = new Date().toDateString()
   const todayOrders = orders.filter(o => new Date(o.createdAt).toDateString() === today)
@@ -51,9 +63,16 @@ export default function Dashboard() {
               <p className="text-emerald-200 text-xs font-bold uppercase tracking-[0.12em]">
                 {format(new Date(), 'EEEE, d MMM yyyy')}
               </p>
-              <h1 className="text-white text-2xl font-extrabold mt-1 tracking-tight leading-tight">
-                {shopName || 'My Store'}
-              </h1>
+              <button
+                onClick={handleEditShopName}
+                className="group flex items-center gap-2 text-left"
+                title="Tap to edit shop name"
+              >
+                <h1 className="text-white text-2xl font-extrabold mt-1 tracking-tight leading-tight">
+                  {shopName || 'My Store'}
+                </h1>
+                <Pencil size={14} className="text-emerald-200/60 group-hover:text-emerald-100 transition-colors mt-1" />
+              </button>
               <p className="text-emerald-200/80 text-xs mt-1 font-medium">
                 {todayOrders.length === 0
                   ? 'No orders today yet'

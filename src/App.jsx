@@ -96,16 +96,36 @@ export default function App() {
 
   // On mount: check if Supabase already has an active session (e.g. after Google redirect)
   useEffect(() => {
+    let cancelled = false
+
+    // Hard fallback: never let the boot spinner hang. If Supabase auth deadlocks
+    // (gotrue-js lock contention is a known issue), proceed to the sign-in screen
+    // after 3s and let the user log in fresh.
+    const bootTimeout = setTimeout(() => {
+      if (!cancelled) setBooting(false)
+    }, 3000)
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return
       if (session && !token) {
-        const phone = session.user.phone || ''
-        const name  = session.user.user_metadata?.shop_name
-          || localStorage.getItem('kirana_shop_name')
-          || ''
+        const phone        = session.user.phone || ''
+        const fromMetadata = session.user.user_metadata?.shop_name
+        const fromStorage  = localStorage.getItem('kirana_shop_name')
+        const name         = fromMetadata || fromStorage || ''
         if (name) {
           setAuth({ token: session.access_token, shopId: session.user.id, shopName: name, phone })
+          // Backfill user_metadata for existing users whose name only lives in
+          // localStorage — so they don't get re-prompted on a different device/incognito.
+          if (!fromMetadata && fromStorage) {
+            supabase.auth.updateUser({ data: { shop_name: fromStorage } }).catch(() => {})
+          }
         }
       }
+      clearTimeout(bootTimeout)
+      setBooting(false)
+    }).catch(() => {
+      if (cancelled) return
+      clearTimeout(bootTimeout)
       setBooting(false)
     })
 
@@ -119,7 +139,11 @@ export default function App() {
         }
       }
     })
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      clearTimeout(bootTimeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function handleAuth(session, shopName) {
@@ -129,6 +153,9 @@ export default function App() {
       shopName,
       phone:    session.user.phone || '',
     })
+    // Persist shop name to Supabase user_metadata so it survives localStorage clears
+    // (incognito, different device, etc.) and is read by App on next login.
+    try { await supabase.auth.updateUser({ data: { shop_name: shopName } }) } catch {}
     // Register/update shop name on backend
     try {
       const { api } = await import('./api/client.js')
