@@ -13,6 +13,7 @@
  */
 
 import { Router } from 'express'
+import db from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
@@ -438,17 +439,115 @@ function postProcess(parsed, message, catalog = []) {
 
 // ── Route: text order parsing ──────────────────────────────────────────────────
 
+// Active-learning fast-path. Looks up each input line in
+// parser_corrections; lines with a hit skip the LLM entirely and use the
+// remembered product directly.
+function normalizeForLookup(s) {
+  return (s || '').toString().normalize('NFKD').toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function extractQty(line) {
+  const m = line.match(/(\d+(?:\.\d+)?)/)
+  return m ? parseFloat(m[1]) : 1
+}
+
+async function applyCorrections(message, shopId, catalog) {
+  const lines = message.split('\n')
+  const inputLines = lines.map(l => l.trim()).filter(isNotChatter)
+  if (!inputLines.length || !shopId) return { items: [], residualLines: lines }
+
+  const { data, error } = await db.from('parser_corrections')
+    .select('raw_line, product_id')
+    .eq('shop_id', shopId)
+    .limit(5000)
+  if (error || !data?.length) return { items: [], residualLines: lines }
+
+  const lookup = new Map(data.map(c => [c.raw_line, c.product_id]))
+  const productById = new Map(catalog.map(p => [p.id, p]))
+
+  const items = []
+  const residualLines = []
+  const usedIds = []
+
+  for (const raw of lines) {
+    const trimmed = raw.trim()
+    if (!isNotChatter(trimmed)) { residualLines.push(raw); continue }
+    const key = normalizeForLookup(trimmed)
+    const productId = lookup.get(key)
+    const product = productId && productById.get(productId)
+    if (product) {
+      items.push({
+        productId:  product.id,
+        productName: product.name,
+        qty:        extractQty(trimmed),
+        unit:       product.unit || null,
+        sourceLine: trimmed,
+      })
+      usedIds.push(product.id)
+    } else {
+      residualLines.push(raw)
+    }
+  }
+
+  // Touch last_used + bump hits for the corrections we used
+  if (usedIds.length) {
+    db.rpc('touch_corrections', { p_shop: shopId, p_ids: usedIds })
+      .then(() => {}).catch(() => {})  // fire-and-forget
+  }
+
+  return { items, residualLines }
+}
+
 router.post('/parse-order', async (req, res) => {
   const { message, catalog = [] } = req.body
   if (!message || typeof message !== 'string')
     return res.status(400).json({ error: 'message is required' })
 
+  // 1. Active-learning fast-path. Lines with remembered corrections never
+  //    hit the LLM. Saves latency + tokens on every repeat order.
+  let preItems = []
+  let llmInput = message
   try {
-    return res.json({ ...postProcess(validate(await callGroq(message, catalog)), message, catalog), source: 'groq' })
+    const { items: preMatched, residualLines } = await applyCorrections(message, req.userId, catalog)
+    preItems = preMatched
+    if (preMatched.length) {
+      llmInput = residualLines.join('\n').trim()
+    }
+  } catch (e) { console.warn('[LLM] correction lookup failed:', e.message) }
+
+  // If everything resolved from corrections, short-circuit.
+  if (preItems.length && !llmInput.trim()) {
+    return res.json({
+      items: preItems,
+      unrecognised: [],
+      source: 'corrections',
+      preMatched: preItems.length,
+    })
+  }
+
+  function mergeAndPostProcess(llmResult) {
+    const merged = {
+      items:        [...preItems, ...llmResult.items],
+      unrecognised: llmResult.unrecognised,
+    }
+    return postProcess(merged, message, catalog)
+  }
+
+  try {
+    return res.json({
+      ...mergeAndPostProcess(validate(await callGroq(llmInput, catalog))),
+      source: 'groq',
+      preMatched: preItems.length,
+    })
   } catch (e) { console.warn('[LLM] Groq text failed:', e.message) }
 
   try {
-    return res.json({ ...postProcess(validate(await callGemini(message, catalog)), message, catalog), source: 'gemini' })
+    return res.json({
+      ...mergeAndPostProcess(validate(await callGemini(llmInput, catalog))),
+      source: 'gemini',
+      preMatched: preItems.length,
+    })
   } catch (e) { console.warn('[LLM] Gemini text failed:', e.message) }
 
   return res.status(503).json({ error: 'LLM unavailable' })
