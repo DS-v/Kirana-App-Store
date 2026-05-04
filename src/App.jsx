@@ -25,10 +25,21 @@ function AppShell() {
   const hydrate              = useStore(s => s.hydrate)
   const loading              = useStore(s => s.loading)
   const shopId               = useStore(s => s.shopId)
+  const shopName             = useStore(s => s.shopName)
   const setIncomingMessages  = useStore(s => s.setIncomingMessages)
   const addIncomingMessage   = useStore(s => s.addIncomingMessage)
 
   useEffect(() => {
+    // Ensure the shop row exists in the DB on every app load.
+    // POST /api/shops uses upsert (ON CONFLICT DO UPDATE) so this is always safe.
+    // Critical for returning users whose session is restored from localStorage —
+    // they skip handleAuth so the shop row may not exist, causing FK errors on products.
+    if (shopName) {
+      import('./api/client.js').then(({ api }) =>
+        api.post('/api/shops', { name: shopName }).catch(() => {/* non-fatal */})
+      )
+    }
+
     hydrate()
 
     // Fetch any pending incoming messages that arrived while the app was closed
