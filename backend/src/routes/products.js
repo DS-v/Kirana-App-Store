@@ -1,6 +1,18 @@
 import { Router } from 'express'
 import db from '../db.js'
+import { embedBatch } from '../embeddings.js'
 import { requireAuth } from '../middleware/auth.js'
+
+// Embed a single product fire-and-forget. Failures are non-fatal — the
+// catalog still works without the embedding (vectorPreFilter falls back
+// to the full catalog).
+async function refreshEmbedding(product) {
+  try {
+    const text = [product.name, ...(product.aliases || []), product.category].filter(Boolean).join(' · ')
+    const [vec] = await embedBatch([text])
+    await db.from('products').update({ embedding: vec }).eq('id', product.id)
+  } catch (e) { console.warn('[products] embed refresh failed:', e.message) }
+}
 
 const router = Router()
 router.use(requireAuth)
@@ -50,6 +62,7 @@ router.post('/', async (req, res) => {
     .select()
     .single()
   if (error) return res.status(500).json({ error: error.message })
+  refreshEmbedding(data)   // fire-and-forget — populates embedding in background
   res.status(201).json(data)
 })
 
@@ -71,6 +84,11 @@ router.put('/:id', async (req, res) => {
     .select()
     .single()
   if (error) return res.status(500).json({ error: error.message })
+  // Re-embed only if the name/aliases/category changed (the fields that
+  // contribute to the embedding text).
+  if (name !== undefined || aliases !== undefined || category !== undefined) {
+    refreshEmbedding(data)
+  }
   res.json(data)
 })
 
