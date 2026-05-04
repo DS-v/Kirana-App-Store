@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle } from 'lucide-react'
+import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle, Minus } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WAButton from '../components/WAButton'
@@ -63,6 +63,9 @@ export default function Orders() {
   const [period, setPeriod]               = useState('day')   // 'day' | 'week' | 'month'
   const [custSearch, setCustSearch]       = useState('')      // customer picker search text
   const [showCustDrop, setShowCustDrop]   = useState(false)   // dropdown open?
+  const [sendWaReceipt, setSendWaReceipt] = useState(true)    // opt-in WA receipt on save
+  const parseDebounceRef                  = useRef(null)
+  const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
   // ── Parser helpers ─────────────────────────────────────────────────────────
 
@@ -162,6 +165,20 @@ export default function Orders() {
 
   function handleParse() { runParser(pasteMsg) }
 
+  // Auto-parse on paste — 800ms debounce after the last keystroke. Skips if
+  // text is short (< 4 chars) or unchanged since last parse.
+  useEffect(() => {
+    if (!showNew) return
+    if (!pasteMsg || pasteMsg.trim().length < 4) return
+    if (pasteMsg === lastParsedRef.current) return
+    if (parseDebounceRef.current) clearTimeout(parseDebounceRef.current)
+    parseDebounceRef.current = setTimeout(() => {
+      lastParsedRef.current = pasteMsg
+      runParser(pasteMsg)
+    }, 800)
+    return () => clearTimeout(parseDebounceRef.current)
+  }, [pasteMsg, showNew])
+
   function updateItem(idx, patch) {
     setParsedItems(items => items.map((it, i) => i === idx ? { ...it, ...patch } : it))
   }
@@ -177,7 +194,10 @@ export default function Orders() {
         if (cust) await addUdhaar(cust.id, total)
       }
       toast('Order saved!', 'success')
-      if (customerPhone && status === 'confirmed')
+      // WhatsApp receipt is now opt-in (sendWaReceipt checkbox above the
+      // sticky save row). The 'confirmed' branch covers legacy bookings —
+      // current statuses set by these buttons are 'delivered' / 'credit'.
+      if (sendWaReceipt && customerPhone && (status === 'delivered' || status === 'confirmed'))
         window.open(sendOrderConfirmation(customerPhone, customerName, parsedItems, total), '_blank')
       setPasteMsg(''); setCustomerName(''); setCustomerPhone(''); setParsedItems([]); setUnrecognised([])
       setCustSearch(''); setShowNew(false)
@@ -350,6 +370,20 @@ export default function Orders() {
         maxHeight="92vh"
       >
         <div className="space-y-4">
+          {/* Recent customers — one-tap select for the 5 most-recent unique
+              names from the last 50 orders. Saves typing for repeat orders. */}
+          <RecentCustomerChips
+            orders={orders}
+            customers={customers}
+            current={customerPhone || customerName}
+            onPick={c => {
+              setCustomerName(c.name)
+              setCustomerPhone(c.phone || '')
+              setCustSearch(c.name)
+              setShowCustDrop(false)
+            }}
+          />
+
           {/* ── Customer picker ─────────────────────────────────────────── */}
           <CustomerPicker
             customers={customers}
@@ -415,18 +449,26 @@ export default function Orders() {
             />
           </div>
 
-          <button
-            onClick={handleParse}
-            disabled={aiParsing}
-            className="btn-secondary py-2.5 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
-          >
-            {aiParsing ? (
-              <>
-                <span className="w-3.5 h-3.5 rounded-full border-2 border-zinc-400 border-t-emerald-500 animate-spin" />
-                AI parsing…
-              </>
-            ) : 'Parse Order ✦'}
-          </button>
+          {/* Auto-parse status strip — replaces the manual 'Parse Order' button.
+              Parsing kicks in 800ms after the user stops typing. */}
+          {pasteMsg.trim().length >= 4 && (
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-zinc-400 px-1">
+              {aiParsing ? (
+                <>
+                  <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                  <span className="text-emerald-600">AI parsing…</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-emerald-500">✦</span>
+                  <span>Auto-parses jab tum likhna band karte ho</span>
+                  <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
+                    Parse abhi
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {parsedItems.length > 0 && (
             <div className="space-y-2">
@@ -442,13 +484,32 @@ export default function Orders() {
                 <div key={idx} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${item.inStock ? 'bg-emerald-50' : 'bg-red-50'}`}>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
+                    {item.sourceLine && (
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+                        from: "{item.sourceLine}"
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="number"
-                        className="w-12 border border-zinc-200 rounded-lg px-2 py-1 text-sm text-center bg-white"
-                        value={item.qty}
-                        onChange={e => updateItem(idx, { qty: parseFloat(e.target.value) || 1 })}
-                      />
+                      {/* −/+ stepper instead of a number input — easier on mobile */}
+                      <div className="flex items-center bg-white border border-zinc-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => updateItem(idx, { qty: Math.max(1, (item.qty || 1) - 1) })}
+                          className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-50 active:bg-zinc-100"
+                          aria-label="Kam karein"
+                        >
+                          <Minus size={13} />
+                        </button>
+                        <span className="min-w-[28px] text-center text-sm font-bold text-zinc-800 tabular-nums px-1">
+                          {item.qty}
+                        </span>
+                        <button
+                          onClick={() => updateItem(idx, { qty: (item.qty || 1) + 1 })}
+                          className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-50 active:bg-zinc-100"
+                          aria-label="Zyada karein"
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
                       <span className="text-xs text-zinc-400">{item.unit}</span>
                       <span className="text-xs font-bold text-zinc-700">₹{(item.price * item.qty).toFixed(0)}</span>
                       {!item.inStock && <span className="badge bg-red-100 text-red-600">OOS</span>}
@@ -513,9 +574,25 @@ export default function Orders() {
                 <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 hover:!bg-red-100" />
               )}
 
-              {/* Confirm / Udhaar — sticky to bottom of sheet so they're
-                  always reachable even with a long item list */}
+              {/* Sticky save row — always reachable even with a long item list. */}
               <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-zinc-100 space-y-2">
+                {/* Live total + WA toggle */}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-zinc-900 text-base tabular-nums">
+                    Total: ₹{orderTotal(parsedItems).toFixed(0)}
+                  </span>
+                  {customerPhone && (
+                    <label className="flex items-center gap-1.5 text-zinc-500 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={sendWaReceipt}
+                        onChange={e => setSendWaReceipt(e.target.checked)}
+                        className="rounded"
+                      />
+                      WhatsApp receipt
+                    </label>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => confirmOrder('delivered')} className="btn-primary py-3 text-sm flex items-center justify-center gap-1.5">
                     <Check size={15} /> De diya
@@ -524,9 +601,6 @@ export default function Orders() {
                     Udhaar
                   </button>
                 </div>
-                <p className="text-[11px] text-zinc-400 text-center">
-                  WhatsApp pe receipt khulegi
-                </p>
               </div>
             </div>
           )}
@@ -844,6 +918,53 @@ function SumCard({ icon, label, value, sub, color }) {
 }
 
 // ── Customer picker ────────────────────────────────────────────────────────────
+
+// Top 5 customers by last-order date, surfaced as one-tap chips so the
+// shopkeeper rarely has to type for repeat customers.
+function RecentCustomerChips({ orders, customers, current, onPick }) {
+  const top = (() => {
+    const seen = new Map()
+    for (const o of orders.slice(0, 50)) {
+      const key = (o.customerPhone || o.customerName || '').trim().toLowerCase()
+      if (!key || seen.has(key)) continue
+      const c = customers.find(c =>
+        (o.customerPhone && c.phone === o.customerPhone) ||
+        c.name?.toLowerCase() === o.customerName?.toLowerCase()
+      ) || { name: o.customerName, phone: o.customerPhone || '' }
+      seen.set(key, c)
+      if (seen.size >= 5) break
+    }
+    return [...seen.values()]
+  })()
+
+  if (!top.length) return null
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1">
+        Recent
+      </p>
+      <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+        {top.map((c, i) => {
+          const active = current && (c.phone === current || c.name === current)
+          return (
+            <button
+              key={c.phone || c.name || i}
+              onClick={() => onPick(c)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                active
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-white border border-zinc-200 text-zinc-600 active:bg-zinc-50'
+              }`}
+            >
+              {c.name || c.phone}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function CustomerPicker({ customers, name, phone, search, showDrop, onSearchChange, onSelect, onPhoneChange, onBlur, onFocus }) {
   const matches = search.trim().length > 0
