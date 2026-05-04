@@ -25,7 +25,11 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
   credentials: false,
 }))
-app.use(express.json())
+// 25 MB body limit — base64-encoded images from phone cameras are easily
+// 1–4 MB after the ~33% base64 inflation, and the default 100 KB cap was
+// causing /api/llm/parse-image to fail with PayloadTooLargeError →
+// "Internal server error" on every image scan.
+app.use(express.json({ limit: '25mb' }))
 
 // ── health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }))
@@ -52,9 +56,24 @@ try {
 }
 
 // ── global error handler ──────────────────────────────────────────────────────
-app.use((err, _req, res, _next) => {
-  console.error('[error]', err.message)
-  res.status(500).json({ error: 'Internal server error' })
+// Surface common, actionable failures (oversized body, malformed JSON) with
+// their real status + message instead of opaque 500s — the previous handler
+// hid bugs like the express.json() 100 KB default cap behind a generic
+// "Internal server error".
+app.use((err, req, res, _next) => {
+  const status = err.status || err.statusCode || 500
+  console.error(`[error] ${req.method} ${req.path} → ${status}`, err.message)
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Image too large — try a smaller photo (under ~25 MB).',
+    })
+  }
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Malformed JSON in request body' })
+  }
+  res.status(status).json({
+    error: status >= 500 ? 'Internal server error' : (err.message || 'Request failed'),
+  })
 })
 
 const PORT = process.env.PORT || 3001
