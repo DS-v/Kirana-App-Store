@@ -61,7 +61,19 @@ async function compressImage(file) {
   })
 }
 
-export default function ImageOrderScanner({ onItemsReady, onError, compact = false }) {
+// Props:
+//   compact     — when true + IDLE phase, render a single icon-cell button
+//                 instead of the full Take/Upload picker card.
+//   autoCommit  — when true, after a successful parse skip our own RESULT
+//                 preview and call onItemsReady() directly, then reset to
+//                 IDLE. The parent owns the staging UI in that case.
+//                 Defaults to whatever `compact` is, since "compact"
+//                 invocations are usually inline (parent-staged) too.
+//                 Set autoCommit explicitly when you want full IDLE picker
+//                 + parent-staged confirmation, e.g. inside a dedicated
+//                 AI flow screen.
+export default function ImageOrderScanner({ onItemsReady, onError, compact = false, autoCommit }) {
+  const _autoCommit = autoCommit ?? compact
   const products = useStore(s => s.products)
 
   const [phase, setPhase]         = useState(PHASES.IDLE)
@@ -69,6 +81,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
   const [aiItems, setAiItems]     = useState([])
   const [aiUnrec, setAiUnrec]     = useState([])
   const [aiSource, setAiSource]   = useState('')
+  const [aiOcrText, setAiOcrText] = useState('')
   const [errMsg, setErrMsg]       = useState('')
 
   const fileRef   = useRef(null)
@@ -80,6 +93,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
     setAiItems([])
     setAiUnrec([])
     setAiSource('')
+    setAiOcrText('')
     setErrMsg('')
     // Reset file inputs so the same file can be re-selected
     if (fileRef.current)   fileRef.current.value   = ''
@@ -133,7 +147,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
         throw new Error(msg)
       }
 
-      const { items, unrecognised, source } = await resp.json()
+      const { items, unrecognised, source, ocrText } = await resp.json()
 
       // 5 — enrich with price / inStock from local catalog
       const enriched = items.map(it => {
@@ -145,15 +159,19 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
       setAiUnrec(unrecognised)
       setAiSource(source)
 
-      // In compact mode the parent already shows its own staging UI
-      // (item list, swap, qty edit, etc.). Skip our RESULT preview and
-      // hand items back immediately — keeps the flow uninterrupted and
-      // doesn't surface technical source strings to the shopkeeper.
-      if (compact) {
-        onItemsReady?.({ items: enriched, unrecognised, source })
+      // autoCommit: skip RESULT preview, hand items to parent immediately.
+      // Used by the AI flow's photo mode where the parent's staging area
+      // is the actual confirmation step. ocrText is passed through so the
+      // parent can show "Read from image: ..." to the shopkeeper.
+      if (_autoCommit) {
+        onItemsReady?.({ items: enriched, unrecognised, source, ocrText })
         URL.revokeObjectURL(previewUrl)
         setPhase(PHASES.IDLE)
       } else {
+        // Full standalone mode: stash everything, show RESULT preview,
+        // wait for handleUseItems() to fire onItemsReady when the user
+        // taps the confirm button.
+        setAiOcrText?.(ocrText || '')
         setPhase(PHASES.RESULT)
       }
 
@@ -166,7 +184,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
   }
 
   function handleUseItems() {
-    onItemsReady({ items: aiItems, unrecognised: aiUnrec, source: aiSource })
+    onItemsReady({ items: aiItems, unrecognised: aiUnrec, source: aiSource, ocrText: aiOcrText })
     reset()
   }
 

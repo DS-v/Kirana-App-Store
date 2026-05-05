@@ -4,13 +4,19 @@ export function isSpeechSupported() {
   return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
 }
 
-export function createRecognition() {
+export function createRecognition({ continuous = false, lang = 'en-IN' } = {}) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition
   if (!SR) return null
   const rec = new SR()
-  rec.continuous = false
+  rec.continuous     = continuous
   rec.interimResults = true
-  rec.lang = 'hi-IN' // Hindi; also handles Hinglish naturally
+  // 'en-IN' (Indian English) handles Hinglish kirana orders better in practice
+  // than 'hi-IN' — English product names ("Maggi", "Parle-G", "Amul Milk")
+  // come out in Latin script and Hindi function words ("do", "ek", "teen",
+  // "kilo", "packet") still transcribe correctly. Pure 'hi-IN' tends to
+  // emit Devanagari for everything which the LLM then has to transliterate
+  // back. Caller can override via the lang option.
+  rec.lang = lang
   rec.maxAlternatives = 3
   return rec
 }

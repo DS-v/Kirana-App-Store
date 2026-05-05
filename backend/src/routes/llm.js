@@ -816,7 +816,11 @@ R2  CATEGORY WALL. FOOD (anda/egg, dudh/milk, atta, dal, namak, cheeni, masala, 
 
 R3  SIZE / VARIANT DISAMBIGUATION. When the customer's wording specifies a size, brand, or color hint (e.g. "Maggi 70g", "Amul Toned Milk 1L", "lal wala tel"), pick the candidate that matches that hint. Default to the smallest size when nothing is specified.
 
-R4  HINGLISH / DEVANAGARI MAP TO ENGLISH CATALOG NAMES. Examples — dudh/doodh = milk; atta/aata = wheat flour; namak = salt; cheeni = sugar; tel = oil; magi/mggi = Maggi; P-G/PG = Parle-G; A milk = Amul Milk.
+R4  ENGLISH / HINDI / HINGLISH / DEVANAGARI ALL MAP TO THE SAME ENGLISH CATALOG NAMES. Match by *meaning*, not script.
+    Romanised Hinglish: dudh/doodh = milk; atta/aata = wheat flour; namak = salt; cheeni/chini = sugar; tel = oil; chai-patti = tea; ghee = clarified butter; chawal = rice; dal = lentils; sabun = soap; tel = oil.
+    Brand abbreviations: magi/mggi = Maggi; P-G/PG = Parle-G; A milk = Amul Milk; lays = Lay's; bournvita / boost / horlicks stay literal.
+    Devanagari → English: मैगी = Maggi; पारले-जी = Parle-G; अमूल = Amul; आटा = atta/wheat flour; दूध = milk; चीनी = sugar; नमक = salt; तेल = oil; चावल = rice; दाल = lentils; साबुन = soap; चाय = tea; घी = ghee; अंडा = egg; ब्रेड = bread; बिस्किट = biscuit; चॉकलेट = chocolate.
+    Color / size hints in Hindi: lal/लाल = red; safed/सफेद = white; bada/बड़ा = big; chhota/छोटा = small.
 
 R5  NO INFLATING qty. Use the customer's stated quantity for the matched item; do NOT recalculate from the catalog.
 

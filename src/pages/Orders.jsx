@@ -87,6 +87,10 @@ export default function Orders() {
   const [aiMode, setAiMode]               = useState('voice') // 'voice' | 'photo' | 'paste'
   const [cartSnapshot, setCartSnapshot]   = useState([])
   const [unrecSnapshot, setUnrecSnapshot] = useState([])
+  // What the AI processed in the current AI flow batch — surfaced in the
+  // staging panel so the shopkeeper can see what the model "heard" / "read".
+  // { kind: 'voice'|'photo', text: '<transcript or OCR>' } or null.
+  const [aiInputSummary, setAiInputSummary] = useState(null)
   const parseDebounceRef                  = useRef(null)
   const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
@@ -170,19 +174,23 @@ export default function Orders() {
     runParser(decoded)
   }, [sharedText])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Voice order: transcript feeds directly into the parser
+  // Voice order: transcript feeds directly into the parser. Stash the
+  // final transcript as a summary so the user can see what was heard.
   function handleVoiceResult(transcript) {
     setVoiceInterim('')
     setPasteMsg(transcript)
+    setAiInputSummary({ kind: 'voice', text: transcript })
     runParser(transcript)
   }
 
-  // Image: AI vision already matched items — drop them straight into the form
-  function handleImageItems({ items, unrecognised: unk, source }) {
+  // Image: vision OCR'd + matched. Stash the OCR text so it can be shown
+  // in the staging panel ("Read from image: ...").
+  function handleImageItems({ items, unrecognised: unk, source, ocrText }) {
     setParsedItems(items)
     setUnrecognised(unk)
+    if (ocrText) setAiInputSummary({ kind: 'photo', text: ocrText })
     setShowNew(true)
-    const msg = `${items.length} item${items.length !== 1 ? 's' : ''} matched (${source})${unk.length ? `, ${unk.length} unrecognised` : ''}`
+    const msg = `${items.length} item${items.length !== 1 ? 's' : ''} matched${unk.length ? `, ${unk.length} unrecognised` : ''}`
     toast(msg, items.length ? 'success' : 'info')
   }
 
@@ -218,6 +226,7 @@ export default function Orders() {
     setPasteMsg('')
     setVoiceInterim('')
     setPasteOpen(false)
+    setAiInputSummary(null)
     setAiMode(mode)
     setAiOpen(true)
   }
@@ -236,6 +245,7 @@ export default function Orders() {
     setUnrecSnapshot([])
     setPasteMsg('')
     setPasteOpen(false)
+    setAiInputSummary(null)
     setAiOpen(false)
   }
 
@@ -246,6 +256,7 @@ export default function Orders() {
     setUnrecSnapshot([])
     setPasteMsg('')
     setPasteOpen(false)
+    setAiInputSummary(null)
     setAiOpen(false)
   }
 
@@ -700,35 +711,53 @@ export default function Orders() {
 
               {/* Active mode UI */}
               {aiMode === 'voice' && (
-                <div className="card flex items-center gap-3 py-5">
-                  <CompactVoiceTile
-                    onResult={handleVoiceResult}
-                    onInterim={t => setVoiceInterim(t)}
-                  />
-                  <div className="flex-1 min-w-0">
-                    {voiceInterim ? (
-                      <p className="text-sm text-emerald-700 italic">{voiceInterim}…</p>
-                    ) : (
-                      <>
-                        <p className="text-sm font-bold text-zinc-800">Hold the mic to speak</p>
-                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                          "do Maggi, ek kg aata, teen Parle-G"
-                        </p>
-                      </>
-                    )}
+                <div className="card space-y-3">
+                  <div className="flex items-center gap-3">
+                    <CompactVoiceTile
+                      onResult={handleVoiceResult}
+                      onInterim={t => setVoiceInterim(t)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      {voiceInterim ? (
+                        <>
+                          <p className="text-[10px] font-extrabold text-red-500 uppercase tracking-wider flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-red-500 voice-active inline-block" />
+                            Sun raha hoon
+                          </p>
+                          <p className="text-[11px] text-zinc-400 mt-0.5">Tap mic again to stop</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-bold text-zinc-800">Tap mic, fir bolo</p>
+                          <p className="text-[11px] text-zinc-400 mt-0.5">
+                            "do Maggi, ek kg aata, teen Parle-G"
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Live transcript — shows accumulated finals + current interim
+                      while listening. Stays visible after stop until staging
+                      replaces it. Indented, italic, mono-ish so it reads as a
+                      transcript rather than a heading. */}
+                  {voiceInterim && (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-0.5">
+                        Transcript
+                      </p>
+                      <p className="text-sm text-emerald-900 italic leading-relaxed">{voiceInterim}…</p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {aiMode === 'photo' && (
-                <div>
-                  {/* Full-size scanner card here — handles its own pick / processing /
-                      error UI. After parse, items flow into parsedItems via onItemsReady. */}
-                  <ImageOrderScanner
-                    onItemsReady={handleImageItems}
-                    onError={msg => toast(msg, 'info')}
-                  />
-                </div>
+                <ImageOrderScanner
+                  autoCommit
+                  onItemsReady={handleImageItems}
+                  onError={msg => toast(msg, 'info')}
+                />
               )}
 
               {aiMode === 'paste' && (
@@ -762,9 +791,28 @@ export default function Orders() {
               )}
 
               {aiParsing && aiMode !== 'paste' && (
-                <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-600 px-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
                   <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                  AI parsing…
+                  AI items match kar raha hai…
+                </div>
+              )}
+
+              {/* What the AI processed — shopkeeper visibility into voice
+                  transcript / OCR text. Only shown when something has been
+                  parsed (parsedItems / unrecognised non-empty) so the panel
+                  doesn't appear with empty content during typing. */}
+              {aiInputSummary?.text && (parsedItems.length > 0 || unrecognised.length > 0) && (
+                <div className="rounded-xl border border-violet-100 bg-violet-50/60 px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold text-violet-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    {aiInputSummary.kind === 'voice' ? (
+                      <>🎤 Maine suna</>
+                    ) : (
+                      <>📷 Image se padha</>
+                    )}
+                  </p>
+                  <p className="text-xs text-violet-900 italic leading-relaxed whitespace-pre-wrap">
+                    "{aiInputSummary.text}"
+                  </p>
                 </div>
               )}
 
@@ -1420,9 +1468,23 @@ function CartRow({ item, onSwap, onQty, onRemove }) {
   )
 }
 
+// CompactVoiceTile — tap-to-toggle speech-to-text tile.
+//
+// Behavior:
+//   • Tap once  → start listening (continuous mode, doesn't auto-stop on
+//                 utterance gaps so the shopkeeper can pause to think).
+//   • Tap again → stop listening; accumulated final transcript is fired
+//                 via onResult.
+//   • Live interim text streams up via onInterim while listening.
+//
+// Why not hold-to-talk: shopkeepers iterate while reading off a slip or
+// thinking, and holding the button for 30+ seconds while their hand is
+// also writing in a notebook is awkward. Toggle-mode mirrors WhatsApp
+// voice notes — familiar UX.
 function CompactVoiceTile({ onResult, onInterim }) {
   const [listening, setListening] = useState(false)
-  const recRef = useRef(null)
+  const recRef          = useRef(null)
+  const finalBufferRef  = useRef('')
 
   if (!isSpeechSupported()) {
     return (
@@ -1434,43 +1496,73 @@ function CompactVoiceTile({ onResult, onInterim }) {
   }
 
   function start() {
-    const rec = createRecognition()
+    finalBufferRef.current = ''
+    const rec = createRecognition({ continuous: true, lang: 'en-IN' })
     if (!rec) return
     recRef.current = rec
+
     rec.onstart = () => setListening(true)
-    rec.onend   = () => { setListening(false); onInterim?.('') }
-    rec.onerror = () => { setListening(false); onInterim?.('') }
+
     rec.onresult = (e) => {
-      const results = Array.from(e.results)
-      const interimText = results.map(r => r[0].transcript).join(' ')
-      onInterim?.(interimText)
-      const final = results.find(r => r.isFinal)
-      if (final) {
-        onResult?.(final[0].transcript.trim())
-        onInterim?.('')
+      // Web Speech API streams cumulative results. Iterate from
+      // e.resultIndex — the first NEW result since last event — so we
+      // don't double-buffer the same text.
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i]
+        if (r.isFinal) {
+          finalBufferRef.current += (finalBufferRef.current ? ' ' : '') + r[0].transcript.trim()
+        } else {
+          interim += r[0].transcript
+        }
       }
+      // Surface "<accumulated finals> + <current interim>" so the user
+      // sees the full transcript build up live.
+      const visible = (finalBufferRef.current + ' ' + interim).trim()
+      onInterim?.(visible)
     }
+
+    rec.onerror = (e) => {
+      // 'no-speech' is benign — user stopped without speaking. Don't
+      // surface it as an error.
+      if (e?.error && e.error !== 'no-speech') {
+        console.warn('[voice] recognition error:', e.error)
+      }
+      setListening(false)
+    }
+
+    rec.onend = () => {
+      setListening(false)
+      const finalText = finalBufferRef.current.trim()
+      finalBufferRef.current = ''
+      if (finalText) onResult?.(finalText)
+      onInterim?.('')
+    }
+
     rec.start()
   }
+
   function stop() {
+    // recRef.current?.stop() triggers 'end' which fires onResult with the
+    // accumulated final buffer.
     recRef.current?.stop()
-    setListening(false)
-    onInterim?.('')
+  }
+
+  function toggle() {
+    if (listening) stop()
+    else           start()
   }
 
   return (
     <button
-      onPointerDown={start}
-      onPointerUp={stop}
-      onPointerLeave={stop}
-      title={listening ? 'Sun raha hoon…' : 'Hold to speak'}
+      onClick={toggle}
+      title={listening ? 'Tap to stop' : 'Tap to start speaking'}
       className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border select-none ${
         listening
           ? 'bg-red-500 text-white border-red-500 voice-active'
           : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
       }`}
     >
-      {/* Inline mic glyph — keeps the import small. */}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
         <path d="M19 10a7 7 0 0 1-14 0" />
@@ -1478,7 +1570,7 @@ function CompactVoiceTile({ onResult, onInterim }) {
         <line x1="8"  y1="22" x2="16" y2="22" />
       </svg>
       <span className="text-[10px] font-bold mt-1 leading-none">
-        {listening ? 'Sun raha…' : 'Speak'}
+        {listening ? 'Stop' : 'Speak'}
       </span>
     </button>
   )
