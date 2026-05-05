@@ -115,17 +115,51 @@ export function initWhatsApp(shopId) {
     // Skip empty messages (stickers, media with no caption, etc.)
     if (!msg.body?.trim()) return
 
-    const rawPhone   = msg.from.replace('@c.us', '')
-    // Strip leading country code 91 to get a 10-digit Indian number
-    const fromPhone  = rawPhone.replace(/^91/, '').slice(-10)
-    let   fromName   = fromPhone
-
+    // Resolve sender's real phone number.
+    //
+    // msg.from comes in two shapes:
+    //   • <digits>@c.us           — classic, contains the actual phone
+    //   • <opaqueId>@lid          — newer WhatsApp privacy "Linked Device
+    //                                ID". The phone is hidden from
+    //                                msg.from; we have to ask the contact.
+    //
+    // Strategy: pull contact.number first (works for both formats — it's
+    // the actual phone in international format like "919876543210"). Only
+    // fall back to parsing msg.from when contact.number is missing AND the
+    // chat ID is the classic @c.us form. If we end up with anything that
+    // isn't all digits, we leave the phone blank rather than storing a
+    // LID like "117048@lid" as a "phone" — that breaks customer dedup,
+    // breaks udhaar lookups, and shows up as garbage in the UI.
+    let fromName  = ''
+    let fromPhone = ''
     try {
       const contact = await msg.getContact()
-      fromName = contact.pushname || contact.name || fromPhone
+      fromName = contact?.pushname || contact?.name || contact?.shortName || ''
+      // contact.number is e.g. "919876543210" (international, no +)
+      if (contact?.number) {
+        fromPhone = String(contact.number).replace(/\D/g, '')
+      }
     } catch { /* non-fatal */ }
 
-    console.log(`[WA] Message from ${fromName} (${fromPhone}): "${msg.body.substring(0, 60)}"`)
+    // Fallback: msg.from for classic @c.us only. Skip @lid here on purpose.
+    if (!fromPhone && msg.from?.endsWith('@c.us')) {
+      const idPart = msg.from.replace('@c.us', '')
+      if (/^\d+$/.test(idPart)) fromPhone = idPart
+    }
+
+    // Strip leading country code 91 → 10-digit Indian number when it fits.
+    if (fromPhone.length > 10 && fromPhone.startsWith('91')) {
+      fromPhone = fromPhone.slice(2)
+    }
+
+    // Final guard: only persist a phone if it's purely digits and looks
+    // like a plausible 10-15 digit number. Otherwise empty string — the
+    // shopkeeper can backfill from Khaata once they see the message.
+    if (!/^\d{8,15}$/.test(fromPhone)) fromPhone = ''
+
+    if (!fromName) fromName = fromPhone || 'Unknown'
+
+    console.log(`[WA] Message from ${fromName} (${fromPhone || 'no-phone'}): "${msg.body.substring(0, 60)}"`)
 
     const { error } = await supabase.from('incoming_whatsapp').insert({
       shop_id:      _shopId,
