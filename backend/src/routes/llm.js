@@ -672,14 +672,55 @@ function validateExtract(obj) {
 }
 
 // Stage 2: for each extracted item, embed its name and pull top-K candidates
+// ── Embed cache (in-memory LRU) ───────────────────────────────────────────────
+// Maps (shopId, normalized item name) → 768-dim vector. Process-lifetime cache;
+// avoids re-embedding common terms ("maggi", "atta", "milk") on every order.
+//
+// Why this matters: per-item embedding turned 1 embed call/order into N. With
+// Gemini's 1000/day free-tier cap that's ~200 orders/day before quota dies.
+// In practice, 60-80% of order items repeat across orders for an established
+// shop, so cached terms reduce real API calls by the same fraction.
+//
+// Map preserves insertion order in JS, so `keys().next()` gives us the oldest
+// entry — touching on hit (delete + re-set) gives us LRU eviction for free.
+
+const EMBED_CACHE_MAX = 5000
+const embedCache = new Map()
+
+function embedCacheKey(shopId, name) {
+  // Normalize: lowercase, collapse whitespace. Hindi/Devanagari preserved as-is
+  // (case is meaningless there, whitespace is what matters).
+  return `${shopId}::${(name || '').toLowerCase().trim().replace(/\s+/g, ' ')}`
+}
+
+async function embedCached(shopId, name) {
+  const key = embedCacheKey(shopId, name)
+  if (embedCache.has(key)) {
+    const v = embedCache.get(key)
+    // LRU touch
+    embedCache.delete(key)
+    embedCache.set(key, v)
+    return v
+  }
+  const vec = await embed(name)
+  embedCache.set(key, vec)
+  if (embedCache.size > EMBED_CACHE_MAX) {
+    // Evict oldest
+    const oldest = embedCache.keys().next().value
+    if (oldest != null) embedCache.delete(oldest)
+  }
+  return vec
+}
+
 // from pgvector. Embeds run in PARALLEL (Promise.all), so a 5-item order
 // pays roughly the cost of one embed call wall-clock. If embedding fails
 // (quota / network), the item gets an empty candidate list — the match LLM
-// will treat it as unrecognised.
+// will treat it as unrecognised. Embeddings are cached per (shop, name) so
+// common terms cost zero API calls on repeat use.
 async function shortlistPerItem(items, shopId, topK = 15) {
   return Promise.all(items.map(async (it) => {
     try {
-      const queryVec = await embed(it.name)
+      const queryVec = await embedCached(shopId, it.name)
       const { data, error } = await db.rpc('match_products', {
         p_shop:      shopId,
         p_embedding: queryVec,
@@ -693,8 +734,8 @@ async function shortlistPerItem(items, shopId, topK = 15) {
           name:    p.name,
           unit:    p.unit,
           aliases: p.aliases || [],
-          // Include similarity so the match LLM (and the deterministic
-          // shortcut, when we add one) can use it as a tiebreak signal.
+          // Similarity drives the deterministic shortcut and serves as a
+          // tiebreak signal in the match LLM prompt.
           similarity: Number(p.similarity ?? 0),
         })),
       }
@@ -705,13 +746,58 @@ async function shortlistPerItem(items, shopId, topK = 15) {
   }))
 }
 
+// ── Confidence shortcut ───────────────────────────────────────────────────────
+// If pgvector is decisively confident about an item — top-1 similarity above
+// a threshold AND a clear gap to top-2 — we accept the top-1 directly without
+// a match LLM call. Tunable thresholds; the defaults below were chosen to
+// favor precision over recall (false-positive shortcut would be worse than
+// the cost of a match LLM call).
+
+const CONFIDENT_SIM_THRESHOLD = 0.90  // top-1 similarity must be at least this
+const CONFIDENT_GAP_THRESHOLD = 0.06  // top-1 must beat top-2 by at least this
+
+function splitByConfidence(shortlistedItems) {
+  const resolved  = []
+  const ambiguous = []
+  for (const item of shortlistedItems) {
+    const top1 = item.candidates[0]
+    const top2 = item.candidates[1]
+    const confident =
+      top1 &&
+      top1.similarity >= CONFIDENT_SIM_THRESHOLD &&
+      (!top2 || (top1.similarity - top2.similarity) >= CONFIDENT_GAP_THRESHOLD)
+
+    if (confident) {
+      resolved.push({
+        productId:   top1.id,
+        productName: top1.name,
+        qty:         item.qty,
+        unit:        item.unit ?? top1.unit ?? null,
+      })
+    } else {
+      ambiguous.push(item)
+    }
+  }
+  return { resolved, ambiguous }
+}
+
 // Stage 3: match prompt. Each item shows the customer's wording AND its own
 // candidate set so the LLM can disambiguate variants (size, brand, "lal
 // wala") with full context.
-function buildMatchPrompt(originalMessage, shortlistedItems) {
+//
+// Prompt-size guard: cap candidates per item to keep the prompt bounded
+// regardless of order size. With default cap=10, a 30-item order produces
+// ~25K tokens — well under llama-3.1-8b's 128K context. For genuinely huge
+// orders (>30 items), we drop further to 5 candidates each so the prompt
+// fits cleanly with room for the model's output.
+function buildMatchPrompt(originalMessage, shortlistedItems, candidatesPerItem = 10) {
+  // Adaptive: very long orders shrink the candidate slice further.
+  const slice = shortlistedItems.length > 30 ? 5 : candidatesPerItem
+
   const itemBlocks = shortlistedItems.map((it, idx) => {
-    const cands = it.candidates.length
-      ? it.candidates.map(c => {
+    const top = it.candidates.slice(0, slice)
+    const cands = top.length
+      ? top.map(c => {
           const aliases = c.aliases?.length ? ` [aliases: ${c.aliases.join(', ')}]` : ''
           return `    - id="${c.id}" :: ${c.name}${aliases}`
         }).join('\n')
@@ -885,40 +971,48 @@ async function parseOrderText({ message, shopId, catalog }) {
     return { ...merged, source: extractSource, preMatched: preItems.length }
   }
 
-  // 2. Per-item shortlist: parallel embed + pgvector top-15 per item.
+  // 2. Per-item shortlist: parallel embed (with cache) + pgvector top-15.
   const shortlisted = await shortlistPerItem(extracted.items, shopId, 15)
 
-  // 3. Match LLM — single batched call, each item with its own candidate set.
-  let matched = null
-  let matchSource = null
-  const matchFailures = []
-  const matchPrompt = buildMatchPrompt(message, shortlisted)
-  for (const [name, fn] of [['groq', callGroqJSON], ['gemini', callGeminiJSON]]) {
-    try {
-      const raw = await fn(matchPrompt, { maxTokens: 1536 })
-      matched = validateMatchOutput(raw, shortlisted)
-      matchSource = `match-${name}`
-      break
-    } catch (e) {
-      console.warn(`[LLM] ${name} match failed:`, e.message)
-      matchFailures.push(`match-${name}: ${e.message}`)
+  // 2a. Confidence shortcut: items with a clear top-1 winner skip the match
+  //     LLM entirely. Only ambiguous items reach stage 3.
+  const { resolved, ambiguous } = splitByConfidence(shortlisted)
+
+  // 3. Match LLM — only invoked if any items remain ambiguous after the
+  //    confidence shortcut. If every item resolved deterministically, we
+  //    skip stage 3 completely (saves ~1 s and one LLM call).
+  let matched      = { items: [], unrecognised: [] }
+  let matchSource  = ambiguous.length === 0 ? 'shortcut' : null
+
+  if (ambiguous.length > 0) {
+    const matchFailures = []
+    const matchPrompt   = buildMatchPrompt(message, ambiguous, 10)
+    for (const [name, fn] of [['groq', callGroqJSON], ['gemini', callGeminiJSON]]) {
+      try {
+        const raw = await fn(matchPrompt, { maxTokens: 1536 })
+        matched = validateMatchOutput(raw, ambiguous)
+        matchSource = `match-${name}`
+        break
+      } catch (e) {
+        console.warn(`[LLM] ${name} match failed:`, e.message)
+        matchFailures.push(`match-${name}: ${e.message}`)
+      }
+    }
+    // Both match LLMs failed — top-1 fallback for the ambiguous items only.
+    if (!matchSource) {
+      console.warn('[LLM] match stage failed for both providers — top-1 fallback')
+      matched     = top1Fallback(ambiguous, 0.78)
+      matchSource = 'match-top1-fallback'
     }
   }
 
-  // If match LLM is fully unavailable, take top-1 from each candidate set
-  // when similarity is high enough; otherwise mark unrecognised.
-  if (!matched) {
-    console.warn('[LLM] match stage failed for both providers — top-1 fallback')
-    matched = top1Fallback(shortlisted, 0.78)
-    matchSource = 'match-top1-fallback'
-  }
-
-  // 4. Combine matched items + LLM-marked unrecognised + extract-time
-  //    unrecognised, then post-process.
+  // 4. Combine: corrections + deterministic-resolved + LLM-matched +
+  //    unrecognised → post-process.
   const merged = postProcess(
     {
       items: [
         ...preItems,
+        ...resolved,
         ...matched.items.map(({ itemIndex, ...rest }) => rest),
       ],
       unrecognised: [
@@ -930,10 +1024,22 @@ async function parseOrderText({ message, shopId, catalog }) {
     catalog,
   )
 
+  // Source string captures the actual path taken so logs/debug show
+  // exactly which optimizations fired:
+  //   "extract-groq → shortcut"           — match LLM skipped entirely
+  //   "extract-groq → match-groq"         — typical (some ambiguity)
+  //   "extract-groq → match-top1-fallback" — match LLM down, used pgvector
+  const sourceParts = [extractSource]
+  if (resolved.length > 0 && matchSource !== 'shortcut') {
+    sourceParts.push(`shortcut(${resolved.length})`)
+  }
+  sourceParts.push(matchSource)
+
   return {
     ...merged,
-    source: `${extractSource} → ${matchSource}`,
-    preMatched: preItems.length,
+    source: sourceParts.join(' → '),
+    preMatched:    preItems.length,
+    deterministic: resolved.length,    // how many items skipped the match LLM
   }
 }
 
