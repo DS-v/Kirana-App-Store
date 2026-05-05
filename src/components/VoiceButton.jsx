@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Mic, MicOff } from 'lucide-react'
 import { isSpeechSupported, createRecognition } from '../utils/speech'
+import { devanagariToLatin } from '../utils/transliterate'
 
 export default function VoiceButton({ onResult, onInterim, size = 'md', label = 'Speak', compact = false }) {
   const [listening, setListening] = useState(false)
@@ -27,14 +28,18 @@ export default function VoiceButton({ onResult, onInterim, size = 'md', label = 
     rec.onerror = () => { setListening(false); setInterim('') }
 
     rec.onresult = (e) => {
+      // Some Android Chromes ignore the lang='en-IN' hint and emit
+      // Devanagari for Hindi function words. Force-Latinise so the cart
+      // UI, source-line display, and corrections cache all stay in
+      // Hinglish. No-op when transcript is already Latin.
       const results = Array.from(e.results)
-      const interimText = results.map(r => r[0].transcript).join(' ')
+      const interimText = devanagariToLatin(results.map(r => r[0].transcript).join(' '))
       setInterim(interimText)
       onInterim?.(interimText)
 
       const final = results.find(r => r.isFinal)
       if (final) {
-        onResult?.(final[0].transcript.trim())
+        onResult?.(devanagariToLatin(final[0].transcript.trim()))
         setInterim('')
       }
     }

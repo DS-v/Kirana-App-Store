@@ -9,6 +9,7 @@ import IncomingMessageBanner from '../components/IncomingMessageBanner'
 import ImageOrderScanner from '../components/ImageOrderScanner'
 import { parseOrderMessage, orderTotal } from '../utils/orderParser'
 import { isSpeechSupported, createRecognition } from '../utils/speech'
+import { devanagariToLatin } from '../utils/transliterate'
 import { STATUSES, STATUS_LABEL, STATUS_BADGE, STATUS_COLOR, STATUS_DOT, nextStatusOf, statusAdvanceToast } from '../utils/orderStatus'
 import SwipeableRow from '../components/SwipeableRow'
 import BottomSheet from '../components/BottomSheet'
@@ -1517,8 +1518,11 @@ function CompactVoiceTile({ onResult, onInterim }) {
         }
       }
       // Surface "<accumulated finals> + <current interim>" so the user
-      // sees the full transcript build up live.
-      const visible = (finalBufferRef.current + ' ' + interim).trim()
+      // sees the full transcript build up live. Force-Latinise — Chrome
+      // on Android occasionally ignores the en-IN lang hint and emits
+      // Devanagari for Hindi function words; we keep the cart UI and
+      // corrections cache in Hinglish regardless.
+      const visible = devanagariToLatin((finalBufferRef.current + ' ' + interim).trim())
       onInterim?.(visible)
     }
 
@@ -1533,7 +1537,7 @@ function CompactVoiceTile({ onResult, onInterim }) {
 
     rec.onend = () => {
       setListening(false)
-      const finalText = finalBufferRef.current.trim()
+      const finalText = devanagariToLatin(finalBufferRef.current.trim())
       finalBufferRef.current = ''
       if (finalText) onResult?.(finalText)
       onInterim?.('')

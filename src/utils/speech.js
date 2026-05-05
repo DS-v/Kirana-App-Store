@@ -21,8 +21,10 @@ export function createRecognition({ continuous = false, lang = 'en-IN' } = {}) {
   return rec
 }
 
-// Convenience: returns a promise that resolves with final transcript
-export function listenOnce(lang = 'hi-IN') {
+// Convenience: returns a promise that resolves with final transcript.
+// Default matches createRecognition — 'en-IN' yields Hinglish in Latin script
+// for kirana orders. Passing 'hi-IN' would produce Devanagari output.
+export function listenOnce(lang = 'en-IN') {
   return new Promise((resolve, reject) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SR) return reject(new Error('Speech not supported'))
