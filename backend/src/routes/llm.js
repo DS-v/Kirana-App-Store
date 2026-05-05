@@ -121,40 +121,86 @@ Each entry MUST trace back to a literal line in the customer message.
 }
 
 // ── Vision / image prompt ──────────────────────────────────────────────────────
+//
+// IMPORTANT: vision prompts do NOT embed the catalog. With ~1000+ products a
+// kirana shop can have, the JSON catalog alone exceeds 50K tokens — Groq's
+// free-tier vision model has a 30K TPM limit, and Gemini's free tier rejects
+// too. Instead, vision just OCRs and extracts {name, qty, unit}; the backend
+// matches each name to a catalog row afterwards using token overlap (same
+// matcher already in use for unrecognised text-parser items).
 
-function buildVisionPrompt(catalog) {
-  return `You are an expert kirana (Indian grocery store) assistant with perfect OCR ability. This image shows a customer's order — it may be a handwritten slip, a WhatsApp screenshot, or a printed list, in Hindi, English, or Hinglish.
+function buildVisionPrompt() {
+  return `You are an expert kirana (Indian grocery store) assistant with perfect OCR ability. This image shows a customer's order — handwritten slip, WhatsApp screenshot, or printed list, in Hindi / English / Hinglish.
 
 YOUR TASKS:
-1. READ every piece of text visible in the image (act as an OCR engine).
-2. UNDERSTAND the full intent of each line — not just surface text.
-3. MATCH each item to the shop's catalog using semantic understanding:
-   - Brand names, Hindi names, abbreviations, and nicknames all count.
-   - "M" or "Mggi" → Maggi Noodles; "P-G" or "PG" → Parle-G; "A milk" → Amul Milk.
-   - Handwritten shorthand: "2M 3PG" = 2 Maggi, 3 Parle-G.
-   - "lal wala tel" = red-labelled oil (match by category + color hint).
-   - "50 ka biscuit" = biscuit at ~₹50 price point → find closest catalog match.
-4. Extract quantity (default 1), unit if written.
-5. If something is genuinely unreadable or has no catalog match → unrecognised.
+1. READ every piece of text visible in the image.
+2. For each line that looks like an order item, extract:
+   - productName: the product as written by the customer (raw, exactly as in the image — e.g. "Maggi", "P-G", "lal wala tel", "atta")
+   - qty: the quantity (number). Default 1 if unspecified.
+   - unit: the unit if explicitly written (kg, g, litre, ml, packet, bottle, dozen, pc) — else null.
 
-SEMANTIC MATCHING RULES:
+QUANTITY RULES:
 - Hindi/Hinglish numbers: ek=1, do=2, teen=3, char=4, paanch=5, chhe=6, saat=7, aath=8, nau=9, das=10.
 - Devanagari: एक=1, दो=2, तीन=3, चार=4, पाँच=5, छह=6, सात=7, आठ=8, नौ=9, दस=10.
-- Units: किलो=kg, ग्राम=g, लीटर=litre, पैकेट=packet, बोतल=bottle.
-- Never invent products not in the catalog.
+- Number+unit attached to a name (e.g. "200g vim bar", "1kg aata") = SIZE, not qty → qty=1.
+- Standalone leading number ("5 anda", "do bottle thums") = qty.
 
-CATALOG (JSON):
-${JSON.stringify(slimCatalog(catalog))}
+SKIP non-item lines: greetings, names, phone numbers, dates, "thanks", payment notes, totals.
 
-Reply with ONLY valid JSON — no markdown, no explanation:
+Reply with ONLY valid JSON, no markdown, no commentary:
 {
   "items": [
-    { "productId": "<catalog id>", "productName": "<catalog name>", "qty": <number>, "unit": "<unit or null>" }
+    { "productName": "<as written in image>", "qty": <number>, "unit": "<unit or null>" }
   ],
   "unrecognised": [
-    { "originalLine": "<unmatched text from image>", "qty": <number> }
+    { "originalLine": "<unreadable or non-item text you saw>", "qty": <number> }
   ]
 }`
+}
+
+// Match a vision-extracted item name to a catalog product using token overlap.
+// Returns the best-matching product or null. Same matching logic the text
+// parser uses for fuzzy fallback — kept simple on purpose to stay deterministic.
+function matchVisionItemToCatalog(itemName, catalog) {
+  const itemTokens = new Set(tokensOf(itemName))
+  if (itemTokens.size === 0) return null
+
+  let best = null
+  let bestScore = 0
+  for (const p of catalog) {
+    const haystack = [p.name, ...(p.aliases || [])].join(' ')
+    const productTokens = new Set(tokensOf(haystack))
+    let overlap = 0
+    for (const t of itemTokens) if (productTokens.has(t)) overlap++
+    if (overlap === 0) continue
+    // Prefer matches with higher overlap; tie-break by shorter product name
+    // (more specific match) over longer ones.
+    const score = overlap * 1000 - (p.name?.length || 0)
+    if (score > bestScore) { bestScore = score; best = p }
+  }
+  return best
+}
+
+// Take the vision LLM's output (items have no productId yet) and resolve each
+// name to a catalog row. Items with no match move to `unrecognised` so the
+// shopkeeper isn't shown phantom matches.
+function resolveVisionItems({ items, unrecognised }, catalog) {
+  const resolved = []
+  const stillUnrec = [...(unrecognised || [])]
+  for (const it of items || []) {
+    const match = matchVisionItemToCatalog(it.productName, catalog)
+    if (match) {
+      resolved.push({
+        productId:   match.id,
+        productName: match.name,
+        qty:         it.qty,
+        unit:        it.unit ?? match.unit ?? null,
+      })
+    } else {
+      stillUnrec.push({ originalLine: it.productName, qty: it.qty || 1 })
+    }
+  }
+  return { items: resolved, unrecognised: stillUnrec }
 }
 
 // ── Groq — text ───────────────────────────────────────────────────────────────
@@ -182,11 +228,12 @@ async function callGroq(message, catalog) {
 
 // ── Groq — vision ─────────────────────────────────────────────────────────────
 
-async function callGroqVision(imageBase64, mimeType, catalog, promptOverride) {
+async function callGroqVision(imageBase64, mimeType, _catalog, promptOverride) {
   const key = process.env.GROQ_API_KEY
   if (!key) throw new Error('GROQ_API_KEY not set')
 
-  const prompt = promptOverride ?? buildVisionPrompt(catalog)
+  // catalog is intentionally NOT used here — see buildVisionPrompt comment.
+  const prompt = promptOverride ?? buildVisionPrompt()
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -237,11 +284,12 @@ async function callGemini(message, catalog) {
 
 // ── Gemini — vision ───────────────────────────────────────────────────────────
 
-async function callGeminiVision(imageBase64, mimeType, catalog, promptOverride) {
+async function callGeminiVision(imageBase64, mimeType, _catalog, promptOverride) {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY not set')
 
-  const prompt = promptOverride ?? buildVisionPrompt(catalog)
+  // catalog is intentionally NOT used here — see buildVisionPrompt comment.
+  const prompt = promptOverride ?? buildVisionPrompt()
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
     {
@@ -278,6 +326,26 @@ function validate(obj) {
       unit:        it.unit ? String(it.unit) : null,
     }))
     .filter(it => it.productId && it.productName)
+
+  const unrecognised = (Array.isArray(obj.unrecognised) ? obj.unrecognised : [])
+    .map(u => ({ originalLine: String(u.originalLine || ''), qty: Number(u.qty) || 1 }))
+    .filter(u => u.originalLine)
+
+  return { items, unrecognised }
+}
+
+// Validator for vision responses — same shape as `validate` but does NOT
+// require productId on items (vision doesn't see the catalog; productId is
+// resolved post-hoc by `resolveVisionItems`).
+function validateVision(obj) {
+  if (!obj || typeof obj !== 'object') throw new Error('Vision LLM returned non-object')
+  const items = (Array.isArray(obj.items) ? obj.items : [])
+    .map(it => ({
+      productName: String(it.productName || '').trim(),
+      qty:         Number(it.qty)  || 1,
+      unit:        it.unit ? String(it.unit) : null,
+    }))
+    .filter(it => it.productName)
 
   const unrecognised = (Array.isArray(obj.unrecognised) ? obj.unrecognised : [])
     .map(u => ({ originalLine: String(u.originalLine || ''), qty: Number(u.qty) || 1 }))
@@ -753,9 +821,19 @@ router.post('/parse-image', async (req, res) => {
   // limited, image too large for provider, malformed JSON, etc.).
   const failures = []
 
+  // Helper: validate vision output (no productId required), then resolve each
+  // returned name to a catalog product on the backend. This way the vision
+  // prompt stays small (no embedded catalog) and we still hand the frontend
+  // a productId-keyed result like the text path.
+  const runVision = async (provider, fn) => {
+    const raw    = await fn(imageBase64, mimeType, catalog)
+    const parsed = validateVision(raw)
+    return { ...resolveVisionItems(parsed, catalog), source: provider }
+  }
+
   if (haveGroq) {
     try {
-      return res.json({ ...validate(await callGroqVision(imageBase64, mimeType, catalog)), source: 'groq-vision' })
+      return res.json(await runVision('groq-vision', callGroqVision))
     } catch (e) {
       console.warn('[LLM] Groq vision failed:', e.message)
       failures.push(`groq: ${e.message}`)
@@ -764,7 +842,7 @@ router.post('/parse-image', async (req, res) => {
 
   if (haveGemini) {
     try {
-      return res.json({ ...validate(await callGeminiVision(imageBase64, mimeType, catalog)), source: 'gemini-vision' })
+      return res.json(await runVision('gemini-vision', callGeminiVision))
     } catch (e) {
       console.warn('[LLM] Gemini vision failed:', e.message)
       failures.push(`gemini: ${e.message}`)
