@@ -144,7 +144,18 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
       setAiItems(enriched)
       setAiUnrec(unrecognised)
       setAiSource(source)
-      setPhase(PHASES.RESULT)
+
+      // In compact mode the parent already shows its own staging UI
+      // (item list, swap, qty edit, etc.). Skip our RESULT preview and
+      // hand items back immediately — keeps the flow uninterrupted and
+      // doesn't surface technical source strings to the shopkeeper.
+      if (compact) {
+        onItemsReady?.({ items: enriched, unrecognised, source })
+        URL.revokeObjectURL(previewUrl)
+        setPhase(PHASES.IDLE)
+      } else {
+        setPhase(PHASES.RESULT)
+      }
 
     } catch (e) {
       URL.revokeObjectURL(previewUrl)
@@ -282,7 +293,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
             AI matched {aiItems.length} item{aiItems.length !== 1 ? 's' : ''}
           </p>
           <p className="text-[10px] text-zinc-400 mt-0.5">
-            via {aiSource} · {aiUnrec.length > 0 ? `${aiUnrec.length} unmatched` : 'all matched'}
+            {aiUnrec.length > 0 ? `${aiUnrec.length} unmatched` : 'All items matched'}
           </p>
         </div>
         <button onClick={reset} className="text-zinc-300 hover:text-zinc-500 flex-shrink-0">

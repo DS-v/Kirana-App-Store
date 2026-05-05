@@ -77,6 +77,14 @@ export default function Orders() {
   // 'review' (customer + payment + save). Closing the sheet resets to
   // 'items' so the next open starts fresh.
   const [step, setStep]                   = useState('items')
+  // AI flow lives on top of Step 1 — when open, it takes over the body
+  // and the cart is "snapshotted" so AI staging happens in isolation.
+  // On commit, staging merges back into the cart; on cancel, snapshot is
+  // restored. Keeps the cart screen uncluttered and gives AI its own focus.
+  const [aiOpen, setAiOpen]               = useState(false)
+  const [aiMode, setAiMode]               = useState('voice') // 'voice' | 'photo' | 'paste'
+  const [cartSnapshot, setCartSnapshot]   = useState([])
+  const [unrecSnapshot, setUnrecSnapshot] = useState([])
   const parseDebounceRef                  = useRef(null)
   const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
@@ -194,6 +202,49 @@ export default function Orders() {
 
   function updateItem(idx, patch) {
     setParsedItems(items => items.map((it, i) => i === idx ? { ...it, ...patch } : it))
+  }
+
+  // ── AI flow helpers ────────────────────────────────────────────────────────
+  // openAIFlow:   snapshot current cart → enter AI flow with empty staging
+  // commitAIFlow: merge staged items into cart (dedup by productId) → exit
+  // cancelAIFlow: discard staging → restore cart from snapshot → exit
+  function openAIFlow(mode = 'voice') {
+    setCartSnapshot([...parsedItems])
+    setUnrecSnapshot([...unrecognised])
+    setParsedItems([])
+    setUnrecognised([])
+    setPasteMsg('')
+    setVoiceInterim('')
+    setPasteOpen(false)
+    setAiMode(mode)
+    setAiOpen(true)
+  }
+
+  function commitAIFlow() {
+    // Merge: increment qty when productId already in cart, else append.
+    const merged = [...cartSnapshot]
+    for (const it of parsedItems) {
+      const idx = it.productId ? merged.findIndex(c => c.productId === it.productId) : -1
+      if (idx >= 0) merged[idx] = { ...merged[idx], qty: (merged[idx].qty || 1) + (it.qty || 1) }
+      else merged.push(it)
+    }
+    setParsedItems(merged)
+    setUnrecognised([...unrecSnapshot, ...unrecognised])
+    setCartSnapshot([])
+    setUnrecSnapshot([])
+    setPasteMsg('')
+    setPasteOpen(false)
+    setAiOpen(false)
+  }
+
+  function cancelAIFlow() {
+    setParsedItems(cartSnapshot)
+    setUnrecognised(unrecSnapshot)
+    setCartSnapshot([])
+    setUnrecSnapshot([])
+    setPasteMsg('')
+    setPasteOpen(false)
+    setAiOpen(false)
   }
 
   async function confirmOrder() {
@@ -405,7 +456,7 @@ export default function Orders() {
       {/* New order — bottom sheet so it opens over the list at any scroll pos */}
       <BottomSheet
         open={showNew}
-        onClose={() => { setShowNew(false); setStep('items') }}
+        onClose={() => { setShowNew(false); setStep('items'); setAiOpen(false); setCartSnapshot([]); setUnrecSnapshot([]) }}
         title="Naya Order"
         maxHeight="92vh"
       >
@@ -439,82 +490,9 @@ export default function Orders() {
             />
           </div>
 
-          {step === 'items' && (
+          {step === 'items' && !aiOpen && (
             <>
-              {/* ── 1. Compact AI input ──────────────────────────────── */}
-              <div>
-                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1 mb-1.5 flex items-center gap-1">
-                  <Sparkles size={11} className="text-emerald-500" /> AI se add karein
-                </p>
-
-                <div className="grid grid-cols-3 gap-1.5 bg-cream-100 rounded-2xl p-1.5">
-                  <CompactVoiceTile
-                    onResult={handleVoiceResult}
-                    onInterim={t => setVoiceInterim(t)}
-                  />
-                  <ImageOrderScanner
-                    compact
-                    onItemsReady={handleImageItems}
-                    onError={msg => toast(msg, 'info')}
-                  />
-                  <button
-                    onClick={() => setPasteOpen(o => !o)}
-                    className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border ${
-                      pasteOpen
-                        ? 'bg-emerald-500 text-white border-emerald-500'
-                        : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
-                    }`}
-                  >
-                    <ClipboardPaste size={16} />
-                    <span className="text-[10px] font-bold mt-1 leading-none">Paste</span>
-                  </button>
-                </div>
-
-                {voiceInterim && (
-                  <div className="mt-1.5 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700 italic">
-                    {voiceInterim}…
-                  </div>
-                )}
-
-                {pasteOpen && (
-                  <div className="mt-2 space-y-1.5">
-                    <textarea
-                      className="input-field h-24 resize-none text-sm"
-                      placeholder={"Parle-G 2 packet\nMaggi 3\nAmul milk 1 litre"}
-                      value={pasteMsg}
-                      onChange={e => { setPasteMsg(e.target.value); setParsedItems([]); setUnrecognised([]) }}
-                      autoFocus
-                    />
-                    {pasteMsg.trim().length >= 4 && (
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 px-1">
-                        {aiParsing ? (
-                          <>
-                            <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                            <span className="text-emerald-600">AI parsing…</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-emerald-500">✦</span>
-                            <span>Auto-parses jab tum likhna band karte ho</span>
-                            <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
-                              Parse abhi
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {aiParsing && !pasteOpen && (
-                  <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-emerald-600 px-1">
-                    <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                    AI parsing…
-                  </div>
-                )}
-              </div>
-
-              {/* ── 2. Cart container — search-and-add INSIDE ─────────── */}
+              {/* ── Cart with manual search-and-add INSIDE ──────────── */}
               <div className="card p-0 overflow-hidden">
                 <div className="px-3 pt-3 pb-2 border-b border-cream-100">
                   <ProductSearchAdd
@@ -539,10 +517,10 @@ export default function Orders() {
                 </div>
 
                 {parsedItems.length === 0 && unrecognised.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-xs text-zinc-400 leading-relaxed">
+                  <div className="px-4 py-7 text-center text-xs text-zinc-400 leading-relaxed">
                     Cart khaali hai.<br/>
-                    Saamaan dhoondhke add karein <span className="text-zinc-300">↑</span>
-                    {' '}ya AI se add karein <span className="text-zinc-300">↑</span>
+                    Saamaan dhoondhke add karein <span className="text-zinc-300">↑</span>{' '}
+                    ya niche AI button se add karein <span className="text-zinc-300">↓</span>
                   </div>
                 ) : (
                   <>
@@ -554,55 +532,13 @@ export default function Orders() {
 
                     <div className="divide-y divide-cream-50">
                       {parsedItems.map((item, idx) => (
-                        <div
+                        <CartRow
                           key={idx}
-                          className={`flex items-center gap-2.5 px-3 py-2.5 ${item.inStock ? '' : 'bg-red-50/40'}`}
-                        >
-                          <button
-                            onClick={() => setSwapTarget({ idx, item })}
-                            className="flex-1 min-w-0 text-left active:opacity-70"
-                            title="Tap to swap this item"
-                          >
-                            <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
-                            <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-                              ₹{item.price} / {item.unit}
-                              {item.sourceLine && <> · from: "{item.sourceLine}"</>}
-                              {!item.inStock && <span className="ml-1 text-red-500 font-bold">OOS</span>}
-                            </p>
-                          </button>
-
-                          <div className="flex items-center bg-white border border-cream-200 rounded-lg overflow-hidden flex-shrink-0">
-                            <button
-                              onClick={() => updateItem(idx, { qty: Math.max(1, (item.qty || 1) - 1) })}
-                              className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
-                              aria-label="Kam karein"
-                            >
-                              <Minus size={13} />
-                            </button>
-                            <span className="min-w-[24px] text-center text-sm font-bold text-zinc-800 tabular-nums">
-                              {item.qty}
-                            </span>
-                            <button
-                              onClick={() => updateItem(idx, { qty: (item.qty || 1) + 1 })}
-                              className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
-                              aria-label="Zyada karein"
-                            >
-                              <Plus size={13} />
-                            </button>
-                          </div>
-
-                          <span className="text-xs font-bold text-zinc-700 tabular-nums w-12 text-right flex-shrink-0">
-                            ₹{(item.price * item.qty).toFixed(0)}
-                          </span>
-
-                          <button
-                            onClick={() => setParsedItems(p => p.filter((_, i) => i !== idx))}
-                            className="text-zinc-300 active:text-red-400 flex-shrink-0"
-                            aria-label="Remove item"
-                          >
-                            <X size={15} />
-                          </button>
-                        </div>
+                          item={item}
+                          onSwap={() => setSwapTarget({ idx, item })}
+                          onQty={(qty) => updateItem(idx, { qty })}
+                          onRemove={() => setParsedItems(p => p.filter((_, i) => i !== idx))}
+                        />
                       ))}
 
                       {unrecognised.map((u, idx) => (
@@ -665,11 +601,28 @@ export default function Orders() {
                 )}
               </div>
 
+              {/* ── AI entry button — opens dedicated AI screen ─────── */}
+              <button
+                onClick={() => openAIFlow('voice')}
+                className="card w-full text-left flex items-center gap-3 active:bg-cream-50 transition-colors border-2 border-dashed border-emerald-200"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <Sparkles size={18} className="text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-extrabold text-zinc-900">AI se ek-saath add karein</p>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    Bolo · photo lo · ya WhatsApp text paste karein
+                  </p>
+                </div>
+                <ChevronRight size={16} className="text-zinc-300 flex-shrink-0" />
+              </button>
+
               {oosLink && (
                 <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 active:!bg-red-100" />
               )}
 
-              {/* ── Sticky "Aage Badho" — only enabled when cart has items ── */}
+              {/* Sticky Aage Badho — disabled when cart empty */}
               <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100">
                 <button
                   onClick={() => canContinue && setStep('review')}
@@ -682,6 +635,208 @@ export default function Orders() {
               </div>
             </>
           )}
+
+          {step === 'items' && aiOpen && (
+            <>
+              {/* ── AI flow — full sheet body ─────────────────────────
+                  Header → mode tabs → active mode UI → staged items
+                  preview → "Add to cart" / "Cancel" sticky actions.
+                  Cart contents are preserved via cartSnapshot so the
+                  user can experiment without fear of losing what they
+                  already have. */}
+              <div className="flex items-center gap-2 -mt-1">
+                <button
+                  onClick={cancelAIFlow}
+                  className="text-xs font-bold text-zinc-500 active:text-zinc-700 flex items-center gap-1 px-2 py-1 -ml-2 rounded-lg active:bg-cream-50"
+                >
+                  ← Cart pe waapas
+                </button>
+                <p className="text-xs font-bold text-emerald-600 ml-auto flex items-center gap-1">
+                  <Sparkles size={11} /> AI se Add karein
+                </p>
+              </div>
+
+              {/* Mode tabs */}
+              <div className="grid grid-cols-3 gap-1.5 bg-cream-100 rounded-2xl p-1.5">
+                {[
+                  { id: 'voice', label: 'Speak' },
+                  { id: 'photo', label: 'Photo' },
+                  { id: 'paste', label: 'Paste' },
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setAiMode(m.id)}
+                    className={`py-2 rounded-xl text-xs font-extrabold transition-colors ${
+                      aiMode === m.id
+                        ? 'bg-white text-zinc-900 shadow-sm'
+                        : 'text-zinc-500'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Active mode UI */}
+              {aiMode === 'voice' && (
+                <div className="card flex items-center gap-3 py-5">
+                  <CompactVoiceTile
+                    onResult={handleVoiceResult}
+                    onInterim={t => setVoiceInterim(t)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    {voiceInterim ? (
+                      <p className="text-sm text-emerald-700 italic">{voiceInterim}…</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-zinc-800">Hold the mic to speak</p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          "do Maggi, ek kg aata, teen Parle-G"
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {aiMode === 'photo' && (
+                <div>
+                  {/* Full-size scanner card here — handles its own pick / processing /
+                      error UI. After parse, items flow into parsedItems via onItemsReady. */}
+                  <ImageOrderScanner
+                    onItemsReady={handleImageItems}
+                    onError={msg => toast(msg, 'info')}
+                  />
+                </div>
+              )}
+
+              {aiMode === 'paste' && (
+                <div className="space-y-2">
+                  <textarea
+                    className="input-field h-32 resize-none text-sm"
+                    placeholder={"Parle-G 2 packet\nMaggi 3\nAmul milk 1 litre"}
+                    value={pasteMsg}
+                    onChange={e => { setPasteMsg(e.target.value); setParsedItems([]); setUnrecognised([]) }}
+                    autoFocus
+                  />
+                  {pasteMsg.trim().length >= 4 && (
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 px-1">
+                      {aiParsing ? (
+                        <>
+                          <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                          <span className="text-emerald-600">AI parsing…</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-emerald-500">✦</span>
+                          <span>Auto-parses jab tum likhna band karte ho</span>
+                          <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
+                            Parse abhi
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {aiParsing && aiMode !== 'paste' && (
+                <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-600 px-1">
+                  <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                  AI parsing…
+                </div>
+              )}
+
+              {/* Staged review */}
+              {(parsedItems.length > 0 || unrecognised.length > 0) && (
+                <div className="card p-0 overflow-hidden">
+                  <div className="px-4 py-2 border-b border-cream-100 bg-cream-50">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                      AI ne dhundha ({parsedItems.length} matched, {unrecognised.length} unmatched)
+                    </p>
+                  </div>
+                  <div className="divide-y divide-cream-50">
+                    {parsedItems.map((item, idx) => (
+                      <CartRow
+                        key={idx}
+                        item={item}
+                        onSwap={() => setSwapTarget({ idx, item })}
+                        onQty={(qty) => updateItem(idx, { qty })}
+                        onRemove={() => setParsedItems(p => p.filter((_, i) => i !== idx))}
+                      />
+                    ))}
+                    {unrecognised.map((u, idx) => (
+                      <div key={idx} className="px-3 py-2.5">
+                        <UnrecognisedItem
+                          item={u}
+                          onAddToCatalog={async (name, price) => {
+                            try {
+                              const product = await addProduct({
+                                name,
+                                price: Number(price) || 0,
+                                unit:  guessUnit(name) || 'pc',
+                                category: guessCategory(name) || 'Other',
+                                inStock: true,
+                              })
+                              setParsedItems(p => [...p, {
+                                productId:   product.id,
+                                productName: product.name,
+                                qty:         u.qty || 1,
+                                unit:        product.unit,
+                                price:       product.price,
+                                inStock:     true,
+                                sourceLine:  u.originalLine,
+                              }])
+                              setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                              try {
+                                const { api } = await import('../api/client.js')
+                                api.post('/api/corrections', {
+                                  rawLine:   u.originalLine,
+                                  productId: product.id,
+                                }).catch(() => {})
+                              } catch {}
+                              toast(`${product.name} catalog me jud gaya`, 'success')
+                            } catch (e) { toast(e.message, 'error') }
+                          }}
+                          onAddOneOff={(name, price, qty) => {
+                            setParsedItems(p => [...p, {
+                              productId:   null,
+                              productName: name,
+                              qty:         qty || 1,
+                              unit:        guessUnit(name) || 'pc',
+                              price,
+                              inStock:     true,
+                            }])
+                            setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                          }}
+                          onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sticky bottom actions */}
+              <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100 flex gap-2">
+                <button
+                  onClick={cancelAIFlow}
+                  className="px-4 py-3.5 rounded-2xl text-sm font-bold text-zinc-500 active:bg-cream-100 active:scale-[0.98] transition-transform"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={commitAIFlow}
+                  disabled={parsedItems.length === 0}
+                  className="btn-primary flex-1 py-3.5 text-sm flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <Plus size={15} />
+                  Cart me {parsedItems.length} item add karein
+                </button>
+              </div>
+            </>
+          )}
+
 
           {step === 'review' && (
             <>
@@ -1174,6 +1329,58 @@ function SumCard({ icon, label, value, sub, color }) {
 // and paste tiles. Same hold-to-record UX as VoiceButton, just shaped like
 // a tile. Returns null if the browser doesn't support speech recognition,
 // which keeps the grid layout sensible for desktop Chrome / Safari fallback.
+
+// CartRow — single line in the cart / AI staging list. Same visual treatment
+// in both contexts so the shopkeeper isn't doing a mental swap when AI flow
+// commits items into the cart. Tap name → ItemSwap; +/- for qty; × removes.
+function CartRow({ item, onSwap, onQty, onRemove }) {
+  return (
+    <div className={`flex items-center gap-2.5 px-3 py-2.5 ${item.inStock ? '' : 'bg-red-50/40'}`}>
+      <button
+        onClick={onSwap}
+        className="flex-1 min-w-0 text-left active:opacity-70"
+        title="Tap to swap this item"
+      >
+        <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
+        <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+          ₹{item.price} / {item.unit}
+          {item.sourceLine && <> · from: "{item.sourceLine}"</>}
+          {!item.inStock && <span className="ml-1 text-red-500 font-bold">OOS</span>}
+        </p>
+      </button>
+      <div className="flex items-center bg-white border border-cream-200 rounded-lg overflow-hidden flex-shrink-0">
+        <button
+          onClick={() => onQty(Math.max(1, (item.qty || 1) - 1))}
+          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
+          aria-label="Kam karein"
+        >
+          <Minus size={13} />
+        </button>
+        <span className="min-w-[24px] text-center text-sm font-bold text-zinc-800 tabular-nums">
+          {item.qty}
+        </span>
+        <button
+          onClick={() => onQty((item.qty || 1) + 1)}
+          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
+          aria-label="Zyada karein"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+      <span className="text-xs font-bold text-zinc-700 tabular-nums w-12 text-right flex-shrink-0">
+        ₹{(item.price * item.qty).toFixed(0)}
+      </span>
+      <button
+        onClick={onRemove}
+        className="text-zinc-300 active:text-red-400 flex-shrink-0"
+        aria-label="Remove item"
+      >
+        <X size={15} />
+      </button>
+    </div>
+  )
+}
+
 function CompactVoiceTile({ onResult, onInterim }) {
   const [listening, setListening] = useState(false)
   const recRef = useRef(null)
