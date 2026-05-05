@@ -43,8 +43,10 @@ export default function Orders() {
   const orders      = useStore(s => s.orders)
   const shopName    = useStore(s => s.shopName)
   const ownerPhone  = useStore(s => s.ownerPhone)
+  const upiId       = useStore(s => s.upiId)   // included in WA payment messages
   const addOrder    = useStore(s => s.addOrder)
   const addProduct  = useStore(s => s.addProduct)
+  const addCustomer = useStore(s => s.addCustomer)
   const updateOrder = useStore(s => s.updateOrder)
   const deleteOrder = useStore(s => s.deleteOrder)
   const addUdhaar   = useStore(s => s.addUdhaar)
@@ -278,13 +280,32 @@ export default function Orders() {
         paidUdhaar:    udhaar,
       })
       // If any udhaar remains, accumulate on the customer's ledger.
+      // Resolution order:
+      //   1. Match by phone (most precise — phones are unique)
+      //   2. Match by case-insensitive name (covers free-typed names with no phone)
+      //   3. Create the customer record on the fly so udhaar can attach.
+      // Without step 3 a partial-paid order to a brand-new customer would
+      // silently lose its udhaar, which is exactly the bug the user reported.
       if (udhaar > 0) {
-        const cust = customers.find(c => c.phone === customerPhone.trim())
+        const phoneTrim = customerPhone.trim()
+        const nameTrim  = customerName.trim()
+        const nameLc    = nameTrim.toLowerCase()
+        let cust =
+          (phoneTrim && customers.find(c => c.phone === phoneTrim)) ||
+          customers.find(c => (c.name || '').toLowerCase() === nameLc)
+        if (!cust && nameTrim) {
+          try {
+            cust = await addCustomer({ name: nameTrim, phone: phoneTrim, notes: '' })
+          } catch (e) { console.warn('addCustomer for udhaar failed:', e.message) }
+        }
         if (cust) await addUdhaar(cust.id, udhaar)
       }
       toast('Order saved!', 'success')
       if (sendWaReceipt && customerPhone && status === 'delivered') {
-        window.open(sendOrderConfirmation(customerPhone, customerName, parsedItems, total), '_blank')
+        window.open(
+          sendOrderConfirmation(customerPhone, customerName, parsedItems, total, { upiId, shopName }),
+          '_blank',
+        )
       }
       // Reset
       setPasteMsg(''); setCustomerName(''); setCustomerPhone(''); setParsedItems([]); setUnrecognised([])
@@ -1083,16 +1104,34 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
   const [showStatusPicker, setShowStatusPicker] = useState(false)
   const [notifyLink, setNotifyLink]             = useState(null)
   const [notifyLabel, setNotifyLabel]           = useState('')
+  // Shop's UPI VPA + name flow into payment-relevant WA messages.
+  const upiId    = useStore(s => s.upiId)
+  const shopName = useStore(s => s.shopName)
 
   function changeStatus(status) {
     updateOrder(order.id, { status })
     setShowStatusPicker(false)
     toast(statusAdvanceToast(order.status, status) || `Status: ${STATUS_LABEL[status]}`, 'success')
 
-    // Offer customer notification for packed / delivered
-    if (order.customerPhone && NOTIFY_ON_STATUS[status]) {
-      setNotifyLink(NOTIFY_ON_STATUS[status](order))
-      setNotifyLabel(NOTIFY_LABEL[status])
+    // Offer customer notification for packed / delivered. Both templates
+    // accept an optional `opts` with upi/shopName — only delivered uses it
+    // today, but we pass it to packed too for forward-compat.
+    if (order.customerPhone) {
+      const amountDue = Math.max(0, (order.total || 0) - (order.paidCash || 0) - (order.paidUpi || 0))
+      let link = null
+      if (status === 'packed') {
+        link = sendOrderPacked(order.customerPhone, order.customerName)
+      } else if (status === 'delivered') {
+        link = sendOrderDelivered(order.customerPhone, order.customerName, order.total, {
+          upiId, shopName, amountDue,
+        })
+      }
+      if (link) {
+        setNotifyLink(link)
+        setNotifyLabel(NOTIFY_LABEL[status])
+      } else {
+        setNotifyLink(null)
+      }
     } else {
       setNotifyLink(null)
     }
@@ -1174,7 +1213,7 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
           <div className="flex gap-2 pt-2 border-t border-zinc-50 flex-wrap">
             {order.customerPhone && (
               <WAButton
-                href={sendOrderConfirmation(order.customerPhone, order.customerName, order.items || [], order.total)}
+                href={sendOrderConfirmation(order.customerPhone, order.customerName, order.items || [], order.total, { upiId, shopName })}
                 label="Resend receipt"
                 size="sm"
                 className="flex-1"
@@ -1190,7 +1229,7 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
             )}
             {order.customerPhone && order.status === 'delivered' && (
               <WAButton
-                href={sendOrderDelivered(order.customerPhone, order.customerName, order.total)}
+                href={sendOrderDelivered(order.customerPhone, order.customerName, order.total, { upiId, shopName, amountDue: Math.max(0, (order.total||0) - (order.paidCash||0) - (order.paidUpi||0)) })}
                 label="Delivered ✓"
                 size="sm"
                 className="flex-1"

@@ -23,6 +23,7 @@ function Spinner() {
 
 function AppShell() {
   const hydrate              = useStore(s => s.hydrate)
+  const refreshShopProfile   = useStore(s => s.refreshShopProfile)
   const loading              = useStore(s => s.loading)
   const shopId               = useStore(s => s.shopId)
   const shopName             = useStore(s => s.shopName)
@@ -39,6 +40,10 @@ function AppShell() {
         api.post('/api/shops', { name: shopName }).catch(() => {/* non-fatal */})
       )
     }
+
+    // Pull the shop's UPI ID from the backend so it's available to WhatsApp
+    // templates even on a fresh device / incognito where localStorage was empty.
+    refreshShopProfile?.()
 
     hydrate()
 
@@ -74,10 +79,13 @@ function AppShell() {
       <div className="flex flex-col h-full max-w-lg mx-auto">
         <div className="flex-1 overflow-y-auto pb-20">
           <Routes>
-            <Route path="/"          element={<Dashboard />} />
-            <Route path="/catalog"   element={<Catalog />} />
+            {/* Home = Orders. Profile lives at /profile and is reachable
+                from the bottom nav. /day kept as legacy redirect. */}
+            <Route path="/"          element={<Navigate to="/orders" replace />} />
             <Route path="/orders"    element={<Orders />} />
             <Route path="/customers" element={<Customers />} />
+            <Route path="/catalog"   element={<Catalog />} />
+            <Route path="/profile"   element={<Dashboard />} />
             <Route path="/day"       element={<Navigate to="/orders" replace />} />
           </Routes>
         </div>

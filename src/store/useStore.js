@@ -14,6 +14,10 @@ const useStore = create((set, get) => ({
   shopId:   localStorage.getItem('kirana_shop_id') || null,
   shopName: localStorage.getItem('kirana_shop_name') || '',
   ownerPhone: localStorage.getItem('kirana_phone') || '',
+  // UPI VPA (e.g. shopname@oksbi). Included in WhatsApp message templates
+  // so customers can tap to pay. Cached locally so the first WA message
+  // after open works offline / before a backend round-trip.
+  upiId: localStorage.getItem('kirana_upi') || '',
 
   setAuth: ({ token, shopId, shopName, phone }) => {
     localStorage.setItem('kirana_token', token)
@@ -21,6 +25,28 @@ const useStore = create((set, get) => ({
     localStorage.setItem('kirana_shop_name', shopName)
     localStorage.setItem('kirana_phone', phone)
     set({ token, shopId, shopName, ownerPhone: phone })
+  },
+
+  // Hydrate UPI from the backend on app load — survives localStorage clears
+  // (incognito, different device, etc.).
+  refreshShopProfile: async () => {
+    try {
+      const shop = await api.get('/api/shops')
+      if (shop?.upi_id) {
+        localStorage.setItem('kirana_upi', shop.upi_id)
+        set({ upiId: shop.upi_id })
+      }
+    } catch {/* non-fatal — first-time users won't have a shop row yet */}
+  },
+
+  updateShopUpi: async (upiId) => {
+    const trimmed = (upiId || '').trim()
+    if (trimmed === get().upiId) return
+    try {
+      await api.post('/api/shops', { name: get().shopName || 'My Store', upiId: trimmed })
+    } catch (e) { /* surface to caller? toast handled in UI */ throw e }
+    localStorage.setItem('kirana_upi', trimmed)
+    set({ upiId: trimmed })
   },
 
   updateShopName: async (name) => {
@@ -59,8 +85,8 @@ const useStore = create((set, get) => ({
       const { default: supabase } = await import('../lib/supabase.js')
       await supabase.auth.signOut()
     } catch {}
-    ['kirana_token','kirana_shop_id','kirana_shop_name','kirana_phone'].forEach(k => localStorage.removeItem(k))
-    set({ token: null, shopId: null, shopName: '', ownerPhone: '' })
+    ['kirana_token','kirana_shop_id','kirana_shop_name','kirana_phone','kirana_upi'].forEach(k => localStorage.removeItem(k))
+    set({ token: null, shopId: null, shopName: '', ownerPhone: '', upiId: '' })
   },
 
   // ── loading / error ────────────────────────────────────────────────────────

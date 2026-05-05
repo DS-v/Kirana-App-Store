@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import {
-  LogOut, Pencil, Phone, Store, MessageSquare, AlertTriangle, Users, ChevronRight,
+  LogOut, Pencil, Phone, Store, MessageSquare, AlertTriangle, Users, ChevronRight, CreditCard,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
@@ -14,11 +14,13 @@ import WASetup from '../components/WASetup'
 export default function Dashboard() {
   const shopName         = useStore(s => s.shopName)
   const ownerPhone       = useStore(s => s.ownerPhone)
+  const upiId            = useStore(s => s.upiId)
   const customers        = useStore(s => s.customers)
   const products         = useStore(s => s.products)
   const logout           = useStore(s => s.logout)
   const updateShopName   = useStore(s => s.updateShopName)
   const updateOwnerPhone = useStore(s => s.updateOwnerPhone)
+  const updateShopUpi    = useStore(s => s.updateShopUpi)
   const toast            = useToast()
   const nav              = useNavigate()
 
@@ -57,6 +59,23 @@ export default function Dashboard() {
     if (digits === ownerPhone) return
     updateOwnerPhone(digits)
     toast(digits ? 'Phone update ho gaya' : 'Phone hata diya', 'success')
+  }
+
+  function handleEditUpi() {
+    const next = window.prompt(
+      'UPI ID daalein (e.g. yourname@oksbi). WhatsApp messages me add ho jaayega taaki customer direct pay kar sake.',
+      upiId || '',
+    )
+    if (next == null) return
+    const trimmed = next.trim()
+    // Basic VPA shape: <handle>@<bank>. Allow empty to clear.
+    if (trimmed && !/^[\w.\-]{2,}@[a-z]{2,}$/i.test(trimmed)) {
+      return toast('Galat UPI ID. Format: name@bank (jaise rahul@oksbi)', 'error')
+    }
+    if (trimmed === upiId) return
+    updateShopUpi(trimmed)
+      .then(() => toast(trimmed ? 'UPI ID save ho gaya' : 'UPI ID hata diya', 'success'))
+      .catch(e => toast(e.message || 'Save failed', 'error'))
   }
 
   return (
@@ -186,6 +205,24 @@ export default function Dashboard() {
                 <p className="text-sm font-bold text-zinc-900">Owner Phone</p>
                 <p className="text-xs text-zinc-400 mt-0.5">
                   {ownerPhone ? `+91 ${ownerPhone}` : 'Add karein'}
+                </p>
+              </div>
+              <Pencil size={13} className="text-zinc-300" />
+            </button>
+
+            <button
+              onClick={handleEditUpi}
+              className="w-full flex items-center gap-3.5 px-4 py-4 text-left active:bg-zinc-50 transition-colors"
+            >
+              <span className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+                <CreditCard size={14} className="text-violet-600" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-zinc-900">UPI ID</p>
+                <p className="text-xs text-zinc-400 mt-0.5 truncate">
+                  {upiId
+                    ? <>{upiId} <span className="text-zinc-300">· WhatsApp me auto-add hoga</span></>
+                    : 'Add karein — customers ko WhatsApp pe direct pay link milega'}
                 </p>
               </div>
               <Pencil size={13} className="text-zinc-300" />
