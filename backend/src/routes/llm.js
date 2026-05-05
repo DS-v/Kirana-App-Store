@@ -120,87 +120,90 @@ Each entry MUST trace back to a literal line in the customer message.
 }`
 }
 
-// ── Vision / image prompt ──────────────────────────────────────────────────────
+// ── Vision OCR prompt ─────────────────────────────────────────────────────────
 //
-// IMPORTANT: vision prompts do NOT embed the catalog. With ~1000+ products a
-// kirana shop can have, the JSON catalog alone exceeds 50K tokens — Groq's
-// free-tier vision model has a 30K TPM limit, and Gemini's free tier rejects
-// too. Instead, vision just OCRs and extracts {name, qty, unit}; the backend
-// matches each name to a catalog row afterwards using token overlap (same
-// matcher already in use for unrecognised text-parser items).
+// New strategy (replaces the old "vision extracts structured items + token-
+// overlap match" path): vision is ONLY an OCR engine. It transcribes the
+// image to plain text, line-per-item, and the resulting text is fed into
+// the SAME pipeline that text and voice orders use:
+//
+//   image → vision OCR → text → applyCorrections → vectorPreFilter →
+//          callGroq/Gemini → postProcess → items, unrecognised
+//
+// Benefits over the previous approach:
+//   • Vision shares everything the text path already has — corrections
+//     fast-path (PR #5), pgvector pre-filter (PR #6), all post-processors
+//     (dropPhantoms, foodCategoryGuard, dedupAcrossLists, ensureLineCoverage).
+//   • Semantic matching for vision (Hinglish synonyms, brand-agnostic hints)
+//     comes for free instead of needing token-overlap.
+//   • One pipeline to debug, prompt-tune, and observe. Vision-only bugs
+//     stop being a separate code surface.
+//   • OCR prompt is tiny (~300 tokens), no catalog payload — comfortably
+//     fits Groq's 30K TPM free-tier limit on any catalog size.
 
-function buildVisionPrompt() {
-  return `You are an expert kirana (Indian grocery store) assistant with perfect OCR ability. This image shows a customer's order — handwritten slip, WhatsApp screenshot, or printed list, in Hindi / English / Hinglish.
+function buildOcrPrompt() {
+  return `You are an OCR engine for a kirana (Indian grocery) store. Read this image — handwritten slip, WhatsApp screenshot, or printed list — and TRANSCRIBE the customer's order as plain text, one item per line, exactly as written.
 
-YOUR TASKS:
-1. READ every piece of text visible in the image.
-2. For each line that looks like an order item, extract:
-   - productName: the product as written by the customer (raw, exactly as in the image — e.g. "Maggi", "P-G", "lal wala tel", "atta")
-   - qty: the quantity (number). Default 1 if unspecified.
-   - unit: the unit if explicitly written (kg, g, litre, ml, packet, bottle, dozen, pc) — else null.
+RULES:
+- Preserve Hindi, English, Hinglish, and Devanagari script as-is. Do NOT translate.
+- One item per line, in the original order they appear in the image.
+- Keep quantity prefixes ("do maggi", "5 anda", "1kg aata") on the same line.
+- Skip headers, greetings ("namaste", "hi"), names, phone numbers, dates,
+  totals, "thanks", signatures, and decorative scribbles.
+- Do not add line numbers, bullets, or any commentary.
+- If the image has no readable order at all, output the single word: EMPTY
 
-QUANTITY RULES:
-- Hindi/Hinglish numbers: ek=1, do=2, teen=3, char=4, paanch=5, chhe=6, saat=7, aath=8, nau=9, das=10.
-- Devanagari: एक=1, दो=2, तीन=3, चार=4, पाँच=5, छह=6, सात=7, आठ=8, नौ=9, दस=10.
-- Number+unit attached to a name (e.g. "200g vim bar", "1kg aata") = SIZE, not qty → qty=1.
-- Standalone leading number ("5 anda", "do bottle thums") = qty.
-
-SKIP non-item lines: greetings, names, phone numbers, dates, "thanks", payment notes, totals.
-
-Reply with ONLY valid JSON, no markdown, no commentary:
-{
-  "items": [
-    { "productName": "<as written in image>", "qty": <number>, "unit": "<unit or null>" }
-  ],
-  "unrecognised": [
-    { "originalLine": "<unreadable or non-item text you saw>", "qty": <number> }
-  ]
-}`
+Respond with PLAIN TEXT only, no markdown, no JSON.`
 }
 
-// Match a vision-extracted item name to a catalog product using token overlap.
-// Returns the best-matching product or null. Same matching logic the text
-// parser uses for fuzzy fallback — kept simple on purpose to stay deterministic.
-function matchVisionItemToCatalog(itemName, catalog) {
-  const itemTokens = new Set(tokensOf(itemName))
-  if (itemTokens.size === 0) return null
-
-  let best = null
-  let bestScore = 0
-  for (const p of catalog) {
-    const haystack = [p.name, ...(p.aliases || [])].join(' ')
-    const productTokens = new Set(tokensOf(haystack))
-    let overlap = 0
-    for (const t of itemTokens) if (productTokens.has(t)) overlap++
-    if (overlap === 0) continue
-    // Prefer matches with higher overlap; tie-break by shorter product name
-    // (more specific match) over longer ones.
-    const score = overlap * 1000 - (p.name?.length || 0)
-    if (score > bestScore) { bestScore = score; best = p }
-  }
-  return best
+async function callGroqVisionOCR(imageBase64, mimeType) {
+  const key = process.env.GROQ_API_KEY
+  if (!key) throw new Error('GROQ_API_KEY not set')
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+          { type: 'text', text: buildOcrPrompt() },
+        ],
+      }],
+      temperature: 0,
+      max_tokens: 1024,
+      // Plain text response — no JSON constraint, this is OCR output.
+    }),
+  })
+  if (!res.ok) throw new Error(`Groq vision OCR ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  return (data.choices?.[0]?.message?.content || '').trim()
 }
 
-// Take the vision LLM's output (items have no productId yet) and resolve each
-// name to a catalog row. Items with no match move to `unrecognised` so the
-// shopkeeper isn't shown phantom matches.
-function resolveVisionItems({ items, unrecognised }, catalog) {
-  const resolved = []
-  const stillUnrec = [...(unrecognised || [])]
-  for (const it of items || []) {
-    const match = matchVisionItemToCatalog(it.productName, catalog)
-    if (match) {
-      resolved.push({
-        productId:   match.id,
-        productName: match.name,
-        qty:         it.qty,
-        unit:        it.unit ?? match.unit ?? null,
-      })
-    } else {
-      stillUnrec.push({ originalLine: it.productName, qty: it.qty || 1 })
+async function callGeminiVisionOCR(imageBase64, mimeType) {
+  const key = process.env.GEMINI_API_KEY
+  if (!key) throw new Error('GEMINI_API_KEY not set')
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: imageBase64 } },
+            { text: buildOcrPrompt() },
+          ],
+        }],
+        generationConfig: { temperature: 0, maxOutputTokens: 1024 },
+      }),
     }
-  }
-  return { items: resolved, unrecognised: stillUnrec }
+  )
+  if (!res.ok) throw new Error(`Gemini vision OCR ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim()
 }
 
 // ── Groq — text ───────────────────────────────────────────────────────────────
@@ -228,12 +231,15 @@ async function callGroq(message, catalog) {
 
 // ── Groq — vision ─────────────────────────────────────────────────────────────
 
+// Vision call with structured JSON output. Used by /parse-catalog only —
+// the order-parsing path uses callGroqVisionOCR (plain text) instead.
+// Requires an explicit prompt; there's no default.
 async function callGroqVision(imageBase64, mimeType, _catalog, promptOverride) {
   const key = process.env.GROQ_API_KEY
   if (!key) throw new Error('GROQ_API_KEY not set')
+  if (!promptOverride) throw new Error('callGroqVision: promptOverride is required')
 
-  // catalog is intentionally NOT used here — see buildVisionPrompt comment.
-  const prompt = promptOverride ?? buildVisionPrompt()
+  const prompt = promptOverride
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -284,12 +290,15 @@ async function callGemini(message, catalog) {
 
 // ── Gemini — vision ───────────────────────────────────────────────────────────
 
+// Vision call with structured JSON output. Used by /parse-catalog only —
+// the order-parsing path uses callGeminiVisionOCR (plain text) instead.
+// Requires an explicit prompt; there's no default.
 async function callGeminiVision(imageBase64, mimeType, _catalog, promptOverride) {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY not set')
+  if (!promptOverride) throw new Error('callGeminiVision: promptOverride is required')
 
-  // catalog is intentionally NOT used here — see buildVisionPrompt comment.
-  const prompt = promptOverride ?? buildVisionPrompt()
+  const prompt = promptOverride
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
     {
@@ -334,25 +343,8 @@ function validate(obj) {
   return { items, unrecognised }
 }
 
-// Validator for vision responses — same shape as `validate` but does NOT
-// require productId on items (vision doesn't see the catalog; productId is
-// resolved post-hoc by `resolveVisionItems`).
-function validateVision(obj) {
-  if (!obj || typeof obj !== 'object') throw new Error('Vision LLM returned non-object')
-  const items = (Array.isArray(obj.items) ? obj.items : [])
-    .map(it => ({
-      productName: String(it.productName || '').trim(),
-      qty:         Number(it.qty)  || 1,
-      unit:        it.unit ? String(it.unit) : null,
-    }))
-    .filter(it => it.productName)
-
-  const unrecognised = (Array.isArray(obj.unrecognised) ? obj.unrecognised : [])
-    .map(u => ({ originalLine: String(u.originalLine || ''), qty: Number(u.qty) || 1 }))
-    .filter(u => u.originalLine)
-
-  return { items, unrecognised }
-}
+// (validateVision was deleted — vision now writes plain OCR text into the
+// same pipeline as text orders, so the only validator we need is `validate`.)
 
 // ── Deterministic post-processors ─────────────────────────────────────────────
 // The LLM gets us 95-97 % of the way there; these passes handle the long tail
@@ -595,62 +587,85 @@ async function vectorPreFilter(message, shopId, fullCatalog, topK = 30) {
   }
 }
 
-router.post('/parse-order', async (req, res) => {
-  const { message, catalog = [] } = req.body
-  if (!message || typeof message !== 'string')
-    return res.status(400).json({ error: 'message is required' })
+// ── The shared text-parse pipeline ────────────────────────────────────────────
+//
+// One implementation, three callers:
+//   • POST /parse-order    — text and voice (voice is browser STT → text)
+//   • POST /parse-image    — calls vision OCR first to get text, then this
+//   • (future)             — any new input modality (telephony, email, etc.)
+//                             can plug into this same function.
+//
+// Stages: corrections fast-path → vector pre-filter → LLM (Groq → Gemini
+// fallback) → post-processors. Returns the same shape the frontend already
+// consumes; throws an Error with .status and .detail on hard failure so each
+// route can map that to its own response.
 
+async function parseOrderText({ message, shopId, catalog }) {
   // 1. Active-learning fast-path. Lines with remembered corrections never
   //    hit the LLM. Saves latency + tokens on every repeat order.
   let preItems = []
   let llmInput = message
   try {
-    const { items: preMatched, residualLines } = await applyCorrections(message, req.userId, catalog)
+    const { items: preMatched, residualLines } = await applyCorrections(message, shopId, catalog)
     preItems = preMatched
-    if (preMatched.length) {
-      llmInput = residualLines.join('\n').trim()
-    }
+    if (preMatched.length) llmInput = residualLines.join('\n').trim()
   } catch (e) { console.warn('[LLM] correction lookup failed:', e.message) }
 
   // 2. Vector pre-filter. Send only the top-30 semantically-similar products
-  //    to the LLM rather than the full 1000+. Big precision + latency win.
-  const focusCatalog = await vectorPreFilter(llmInput, req.userId, catalog, 30)
+  //    to the LLM rather than the full 1000+.
+  const focusCatalog = await vectorPreFilter(llmInput, shopId, catalog, 30)
 
-  // If everything resolved from corrections, short-circuit.
+  // 3. Short-circuit if every line resolved from corrections.
   if (preItems.length && !llmInput.trim()) {
-    return res.json({
-      items: preItems,
-      unrecognised: [],
-      source: 'corrections',
-      preMatched: preItems.length,
-    })
+    return { items: preItems, unrecognised: [], source: 'corrections', preMatched: preItems.length }
   }
 
-  function mergeAndPostProcess(llmResult) {
-    const merged = {
-      items:        [...preItems, ...llmResult.items],
-      unrecognised: llmResult.unrecognised,
-    }
-    return postProcess(merged, message, catalog)
+  const merge = (llmResult) => postProcess(
+    { items: [...preItems, ...llmResult.items], unrecognised: llmResult.unrecognised },
+    message,
+    catalog,
+  )
+
+  // 4. Provider fallback chain.
+  const failures = []
+  try {
+    const out = validate(await callGroq(llmInput, focusCatalog))
+    return { ...merge(out), source: 'groq', preMatched: preItems.length }
+  } catch (e) {
+    console.warn('[LLM] Groq text failed:', e.message)
+    failures.push(`groq: ${e.message}`)
+  }
+  try {
+    const out = validate(await callGemini(llmInput, focusCatalog))
+    return { ...merge(out), source: 'gemini', preMatched: preItems.length }
+  } catch (e) {
+    console.warn('[LLM] Gemini text failed:', e.message)
+    failures.push(`gemini: ${e.message}`)
   }
 
-  try {
-    return res.json({
-      ...mergeAndPostProcess(validate(await callGroq(llmInput, focusCatalog))),
-      source: 'groq',
-      preMatched: preItems.length,
-    })
-  } catch (e) { console.warn('[LLM] Groq text failed:', e.message) }
+  const err  = new Error('LLM unavailable')
+  err.status = 503
+  err.detail = failures.join(' | ')
+  throw err
+}
+
+router.post('/parse-order', async (req, res) => {
+  const { message, catalog = [] } = req.body
+  if (!message || typeof message !== 'string')
+    return res.status(400).json({ error: 'message is required' })
 
   try {
-    return res.json({
-      ...mergeAndPostProcess(validate(await callGemini(llmInput, focusCatalog))),
-      source: 'gemini',
-      preMatched: preItems.length,
+    return res.json(await parseOrderText({
+      message,
+      shopId:  req.userId,
+      catalog,
+    }))
+  } catch (e) {
+    return res.status(e.status || 500).json({
+      error:  e.message || 'Internal error',
+      detail: e.detail,
     })
-  } catch (e) { console.warn('[LLM] Gemini text failed:', e.message) }
-
-  return res.status(503).json({ error: 'LLM unavailable' })
+  }
 })
 
 // ── Catalog extraction prompt (text) ──────────────────────────────────────────
@@ -800,60 +815,98 @@ router.post('/parse-catalog', async (req, res) => {
 })
 
 // ── Route: image / vision order parsing ───────────────────────────────────────
+//
+// Two-stage flow that piggybacks on the text pipeline:
+//
+//   Stage 1: VISION OCR — call Groq (then Gemini fallback) with a tiny
+//            prompt that asks for plain-text transcription only. No catalog,
+//            no JSON, no matching done in the LLM. Output is a multi-line
+//            string identical in shape to what a customer would have typed.
+//
+//   Stage 2: parseOrderText() — exactly the same function /parse-order uses,
+//            so the OCR'd text gets:
+//              • applyCorrections()  (active learning — repeated handwritten
+//                items resolve in zero LLM calls)
+//              • vectorPreFilter()   (pgvector top-30 catalog, semantic
+//                Hinglish matching)
+//              • callGroq → callGemini text LLM with the focused catalog
+//              • postProcess()       (dropPhantoms, foodCategoryGuard,
+//                dedupAcrossLists, ensureLineCoverage)
+//
+// One bug surface, one set of post-processors, one set of prompts to tune.
+// Vision-specific code is now ~60 lines of OCR + this orchestration; the
+// rest is shared with text and voice.
 
 router.post('/parse-image', async (req, res) => {
   const { imageBase64, mimeType = 'image/jpeg', catalog = [] } = req.body
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 is required' })
 
-  // Pre-flight: which providers are even configured? If neither key is
-  // present the route can never succeed — return a clear, actionable
-  // message instead of a generic "unavailable" after two doomed attempts.
   const haveGroq   = !!process.env.GROQ_API_KEY
   const haveGemini = !!process.env.GEMINI_API_KEY
   if (!haveGroq && !haveGemini) {
     return res.status(503).json({
-      error: 'Vision parsing not configured — neither GROQ_API_KEY nor GEMINI_API_KEY is set on the backend.',
+      error: 'Vision OCR not configured — neither GROQ_API_KEY nor GEMINI_API_KEY is set on the backend.',
     })
   }
 
-  // Track each provider's failure so the final 503 can tell the caller
-  // exactly why both fell over (missing key, model deprecated, rate
-  // limited, image too large for provider, malformed JSON, etc.).
-  const failures = []
-
-  // Helper: validate vision output (no productId required), then resolve each
-  // returned name to a catalog product on the backend. This way the vision
-  // prompt stays small (no embedded catalog) and we still hand the frontend
-  // a productId-keyed result like the text path.
-  const runVision = async (provider, fn) => {
-    const raw    = await fn(imageBase64, mimeType, catalog)
-    const parsed = validateVision(raw)
-    return { ...resolveVisionItems(parsed, catalog), source: provider }
-  }
+  // ── Stage 1: OCR ────────────────────────────────────────────────────────
+  const ocrFailures = []
+  let ocrText   = null
+  let ocrSource = null
 
   if (haveGroq) {
     try {
-      return res.json(await runVision('groq-vision', callGroqVision))
+      ocrText   = await callGroqVisionOCR(imageBase64, mimeType)
+      ocrSource = 'groq-vision-ocr'
     } catch (e) {
-      console.warn('[LLM] Groq vision failed:', e.message)
-      failures.push(`groq: ${e.message}`)
+      console.warn('[LLM] Groq OCR failed:', e.message)
+      ocrFailures.push(`groq: ${e.message}`)
     }
   }
-
-  if (haveGemini) {
+  if (!ocrText && haveGemini) {
     try {
-      return res.json(await runVision('gemini-vision', callGeminiVision))
+      ocrText   = await callGeminiVisionOCR(imageBase64, mimeType)
+      ocrSource = 'gemini-vision-ocr'
     } catch (e) {
-      console.warn('[LLM] Gemini vision failed:', e.message)
-      failures.push(`gemini: ${e.message}`)
+      console.warn('[LLM] Gemini OCR failed:', e.message)
+      ocrFailures.push(`gemini: ${e.message}`)
     }
   }
+  if (ocrText == null) {
+    return res.status(503).json({
+      error:  'Vision OCR unavailable',
+      detail: ocrFailures.join(' | '),
+    })
+  }
 
-  // Surface the real reason(s) so the shopkeeper isn't stuck guessing.
-  return res.status(503).json({
-    error: 'Vision LLM unavailable',
-    detail: failures.join(' | '),
-  })
+  // OCR engine signals "no readable order" with the literal token EMPTY.
+  if (!ocrText.trim() || ocrText.trim().toUpperCase() === 'EMPTY') {
+    return res.json({
+      items: [], unrecognised: [], source: ocrSource, ocrText: '',
+    })
+  }
+
+  // ── Stage 2: text pipeline ──────────────────────────────────────────────
+  try {
+    const parsed = await parseOrderText({
+      message: ocrText,
+      shopId:  req.userId,
+      catalog,
+    })
+    return res.json({
+      ...parsed,
+      // Compose the source string so the caller can see both stages, e.g.
+      // "groq-vision-ocr → corrections" or "gemini-vision-ocr → groq".
+      source:  `${ocrSource} → ${parsed.source}`,
+      ocrText,                  // included for debugging / display
+    })
+  } catch (e) {
+    return res.status(e.status || 500).json({
+      error:   e.message || 'Internal error',
+      detail:  e.detail,
+      ocrText,
+    })
+  }
 })
 
 export default router
