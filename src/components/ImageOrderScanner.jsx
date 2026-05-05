@@ -124,7 +124,13 @@ export default function ImageOrderScanner({ onItemsReady, onError }) {
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
-        throw new Error(err.error || `Vision API error ${resp.status}`)
+        // Backend now returns `detail` with the specific provider failure
+        // (e.g. "groq: 401 invalid key | gemini: model deprecated"). Surface
+        // it so the shopkeeper / dev can act, instead of swallowing it.
+        const msg = err.detail
+          ? `${err.error || 'Vision API error'} — ${err.detail}`
+          : (err.error || `Vision API error ${resp.status}`)
+        throw new Error(msg)
       }
 
       const { items, unrecognised, source } = await resp.json()
