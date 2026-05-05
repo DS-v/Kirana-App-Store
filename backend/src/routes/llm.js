@@ -737,15 +737,45 @@ router.post('/parse-image', async (req, res) => {
   const { imageBase64, mimeType = 'image/jpeg', catalog = [] } = req.body
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 is required' })
 
-  try {
-    return res.json({ ...validate(await callGroqVision(imageBase64, mimeType, catalog)), source: 'groq-vision' })
-  } catch (e) { console.warn('[LLM] Groq vision failed:', e.message) }
+  // Pre-flight: which providers are even configured? If neither key is
+  // present the route can never succeed — return a clear, actionable
+  // message instead of a generic "unavailable" after two doomed attempts.
+  const haveGroq   = !!process.env.GROQ_API_KEY
+  const haveGemini = !!process.env.GEMINI_API_KEY
+  if (!haveGroq && !haveGemini) {
+    return res.status(503).json({
+      error: 'Vision parsing not configured — neither GROQ_API_KEY nor GEMINI_API_KEY is set on the backend.',
+    })
+  }
 
-  try {
-    return res.json({ ...validate(await callGeminiVision(imageBase64, mimeType, catalog)), source: 'gemini-vision' })
-  } catch (e) { console.warn('[LLM] Gemini vision failed:', e.message) }
+  // Track each provider's failure so the final 503 can tell the caller
+  // exactly why both fell over (missing key, model deprecated, rate
+  // limited, image too large for provider, malformed JSON, etc.).
+  const failures = []
 
-  return res.status(503).json({ error: 'Vision LLM unavailable' })
+  if (haveGroq) {
+    try {
+      return res.json({ ...validate(await callGroqVision(imageBase64, mimeType, catalog)), source: 'groq-vision' })
+    } catch (e) {
+      console.warn('[LLM] Groq vision failed:', e.message)
+      failures.push(`groq: ${e.message}`)
+    }
+  }
+
+  if (haveGemini) {
+    try {
+      return res.json({ ...validate(await callGeminiVision(imageBase64, mimeType, catalog)), source: 'gemini-vision' })
+    } catch (e) {
+      console.warn('[LLM] Gemini vision failed:', e.message)
+      failures.push(`gemini: ${e.message}`)
+    }
+  }
+
+  // Surface the real reason(s) so the shopkeeper isn't stuck guessing.
+  return res.status(503).json({
+    error: 'Vision LLM unavailable',
+    detail: failures.join(' | '),
+  })
 })
 
 export default router
