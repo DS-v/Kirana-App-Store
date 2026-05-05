@@ -73,6 +73,10 @@ export default function Orders() {
   // - paid == 0 (or empty) → status 'pending', everything on udhaar
   const [paid, setPaid]                   = useState('')
   const [pasteOpen, setPasteOpen]         = useState(false)   // toggles paste textarea
+  // 2-step wizard: 'items' (add products via AI / manual search) →
+  // 'review' (customer + payment + save). Closing the sheet resets to
+  // 'items' so the next open starts fresh.
+  const [step, setStep]                   = useState('items')
   const parseDebounceRef                  = useRef(null)
   const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
@@ -233,7 +237,7 @@ export default function Orders() {
       }
       // Reset
       setPasteMsg(''); setCustomerName(''); setCustomerPhone(''); setParsedItems([]); setUnrecognised([])
-      setCustSearch(''); setPaid(''); setPasteOpen(false)
+      setCustSearch(''); setPaid(''); setPasteOpen(false); setStep('items')
       setShowNew(false)
     } catch (e) { toast(e.message, 'error') }
   }
@@ -401,7 +405,7 @@ export default function Orders() {
       {/* New order — bottom sheet so it opens over the list at any scroll pos */}
       <BottomSheet
         open={showNew}
-        onClose={() => setShowNew(false)}
+        onClose={() => { setShowNew(false); setStep('items') }}
         title="Naya Order"
         maxHeight="92vh"
       >
@@ -410,354 +414,413 @@ export default function Orders() {
           const paidNum   = Math.max(0, parseFloat(paid) || 0)
           const remaining = Math.max(0, total - paidNum)
           const overpaid  = paidNum > total + 0.01
+          const itemCount = parsedItems.length
+          const canContinue = itemCount > 0
+          // Customer is "selected" when name has been picked from the list OR
+          // typed but not in the list (treated as a new customer with no phone).
+          const customerSelected = !!customerName.trim()
 
           return (
         <div className="space-y-3">
-          {/* ── 1. Customer ──────────────────────────────────────────── */}
-          <RecentCustomerChips
-            orders={orders}
-            customers={customers}
-            current={customerPhone || customerName}
-            onPick={c => {
-              setCustomerName(c.name)
-              setCustomerPhone(c.phone || '')
-              setCustSearch(c.name)
-              setShowCustDrop(false)
-            }}
-          />
+          {/* ── Step indicator ──────────────────────────────────────── */}
+          <div className="flex items-center gap-2.5 -mt-1">
+            <StepDot
+              num="1" label="Saamaan"
+              done={step === 'review'} active={step === 'items'}
+              clickable
+              onClick={() => setStep('items')}
+            />
+            <div className={`flex-1 h-px transition-colors ${step === 'review' ? 'bg-emerald-300' : 'bg-cream-200'}`} />
+            <StepDot
+              num="2" label="Customer"
+              active={step === 'review'}
+              clickable={canContinue}
+              onClick={() => canContinue && setStep('review')}
+            />
+          </div>
 
-          <CustomerPicker
-            customers={customers}
-            name={customerName}
-            phone={customerPhone}
-            search={custSearch}
-            showDrop={showCustDrop}
-            onSearchChange={val => {
-              setCustSearch(val)
-              setCustomerName(val)
-              setCustomerPhone('')
-              setShowCustDrop(true)
-            }}
-            onSelect={c => {
-              setCustomerName(c.name)
-              setCustomerPhone(c.phone || '')
-              setCustSearch(c.name)
-              setShowCustDrop(false)
-            }}
-            onPhoneChange={val => setCustomerPhone(val)}
-            onBlur={() => setTimeout(() => setShowCustDrop(false), 150)}
-            onFocus={() => setShowCustDrop(true)}
-          />
+          {step === 'items' && (
+            <>
+              {/* ── 1. Compact AI input ──────────────────────────────── */}
+              <div>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1 mb-1.5 flex items-center gap-1">
+                  <Sparkles size={11} className="text-emerald-500" /> AI se add karein
+                </p>
 
-          {/* ── 2. Compact AI input — three small buttons in one row.
-                Voice  : VoiceButton (hold to speak)
-                Photo  : ImageOrderScanner in compact mode (one-tap pick)
-                Paste  : toggle a textarea below
-              The active mode renders its UI inline below the row. */}
-          <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1 mb-1.5 flex items-center gap-1">
-              <Sparkles size={11} className="text-emerald-500" /> AI se add karein
-            </p>
+                <div className="grid grid-cols-3 gap-1.5 bg-cream-100 rounded-2xl p-1.5">
+                  <CompactVoiceTile
+                    onResult={handleVoiceResult}
+                    onInterim={t => setVoiceInterim(t)}
+                  />
+                  <ImageOrderScanner
+                    compact
+                    onItemsReady={handleImageItems}
+                    onError={msg => toast(msg, 'info')}
+                  />
+                  <button
+                    onClick={() => setPasteOpen(o => !o)}
+                    className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border ${
+                      pasteOpen
+                        ? 'bg-emerald-500 text-white border-emerald-500'
+                        : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
+                    }`}
+                  >
+                    <ClipboardPaste size={16} />
+                    <span className="text-[10px] font-bold mt-1 leading-none">Paste</span>
+                  </button>
+                </div>
 
-            <div className="grid grid-cols-3 gap-1.5 bg-cream-100 rounded-2xl p-1.5">
-              <CompactVoiceTile
-                onResult={handleVoiceResult}
-                onInterim={t => setVoiceInterim(t)}
-              />
-              <ImageOrderScanner
-                compact
-                onItemsReady={handleImageItems}
-                onError={msg => toast(msg, 'info')}
-              />
-              <button
-                onClick={() => setPasteOpen(o => !o)}
-                className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border ${
-                  pasteOpen
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
-                }`}
-              >
-                <ClipboardPaste size={16} />
-                <span className="text-[10px] font-bold mt-1 leading-none">Paste</span>
-              </button>
-            </div>
+                {voiceInterim && (
+                  <div className="mt-1.5 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700 italic">
+                    {voiceInterim}…
+                  </div>
+                )}
 
-            {voiceInterim && (
-              <div className="mt-1.5 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700 italic">
-                {voiceInterim}…
-              </div>
-            )}
-
-            {pasteOpen && (
-              <div className="mt-2 space-y-1.5">
-                <textarea
-                  className="input-field h-24 resize-none text-sm"
-                  placeholder={"Parle-G 2 packet\nMaggi 3\nAmul milk 1 litre"}
-                  value={pasteMsg}
-                  onChange={e => { setPasteMsg(e.target.value); setParsedItems([]); setUnrecognised([]) }}
-                  autoFocus
-                />
-                {pasteMsg.trim().length >= 4 && (
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 px-1">
-                    {aiParsing ? (
-                      <>
-                        <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                        <span className="text-emerald-600">AI parsing…</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-emerald-500">✦</span>
-                        <span>Auto-parses jab tum likhna band karte ho</span>
-                        <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
-                          Parse abhi
-                        </button>
-                      </>
+                {pasteOpen && (
+                  <div className="mt-2 space-y-1.5">
+                    <textarea
+                      className="input-field h-24 resize-none text-sm"
+                      placeholder={"Parle-G 2 packet\nMaggi 3\nAmul milk 1 litre"}
+                      value={pasteMsg}
+                      onChange={e => { setPasteMsg(e.target.value); setParsedItems([]); setUnrecognised([]) }}
+                      autoFocus
+                    />
+                    {pasteMsg.trim().length >= 4 && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 px-1">
+                        {aiParsing ? (
+                          <>
+                            <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                            <span className="text-emerald-600">AI parsing…</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-emerald-500">✦</span>
+                            <span>Auto-parses jab tum likhna band karte ho</span>
+                            <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
+                              Parse abhi
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {aiParsing && !pasteOpen && (
-              <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-emerald-600 px-1">
-                <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                AI parsing…
-              </div>
-            )}
-          </div>
-
-          {/* ── 3. Cart — manual search at the top, items below, total at the bottom ── */}
-          <div className="card p-0 overflow-hidden">
-            <div className="px-3 pt-3 pb-2 border-b border-cream-100">
-              <ProductSearchAdd
-                products={products}
-                onAdd={(p) => {
-                  setParsedItems(items => {
-                    const existing = items.findIndex(it => it.productId === p.id)
-                    if (existing >= 0) {
-                      return items.map((it, i) => i === existing ? { ...it, qty: (it.qty || 1) + 1 } : it)
-                    }
-                    return [...items, {
-                      productId:   p.id,
-                      productName: p.name,
-                      qty:         1,
-                      unit:        p.unit || 'pc',
-                      price:       p.price ?? 0,
-                      inStock:     p.inStock ?? true,
-                    }]
-                  })
-                }}
-              />
-            </div>
-
-            {parsedItems.length === 0 && unrecognised.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs text-zinc-400 leading-relaxed">
-                Cart khaali hai.<br/>
-                Saamaan dhoondhke add karein <span className="text-zinc-300">↑</span>
-                {' '}ya AI se add karein <span className="text-zinc-300">↑</span>
-              </div>
-            ) : (
-              <>
-                {ackLink && (
-                  <div className="px-3 pt-2.5">
-                    <WAButton href={ackLink} label="Acknowledge receipt" />
+                {aiParsing && !pasteOpen && (
+                  <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-emerald-600 px-1">
+                    <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                    AI parsing…
                   </div>
                 )}
+              </div>
 
-                <div className="divide-y divide-cream-50">
-                  {parsedItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex items-center gap-2.5 px-3 py-2.5 ${item.inStock ? '' : 'bg-red-50/40'}`}
-                    >
-                      <button
-                        onClick={() => setSwapTarget({ idx, item })}
-                        className="flex-1 min-w-0 text-left active:opacity-70"
-                        title="Tap to swap this item"
-                      >
-                        <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
-                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-                          ₹{item.price} / {item.unit}
-                          {item.sourceLine && <> · from: "{item.sourceLine}"</>}
-                          {!item.inStock && <span className="ml-1 text-red-500 font-bold">OOS</span>}
-                        </p>
-                      </button>
+              {/* ── 2. Cart container — search-and-add INSIDE ─────────── */}
+              <div className="card p-0 overflow-hidden">
+                <div className="px-3 pt-3 pb-2 border-b border-cream-100">
+                  <ProductSearchAdd
+                    products={products}
+                    onAdd={(p) => {
+                      setParsedItems(items => {
+                        const existing = items.findIndex(it => it.productId === p.id)
+                        if (existing >= 0) {
+                          return items.map((it, i) => i === existing ? { ...it, qty: (it.qty || 1) + 1 } : it)
+                        }
+                        return [...items, {
+                          productId:   p.id,
+                          productName: p.name,
+                          qty:         1,
+                          unit:        p.unit || 'pc',
+                          price:       p.price ?? 0,
+                          inStock:     p.inStock ?? true,
+                        }]
+                      })
+                    }}
+                  />
+                </div>
 
-                      <div className="flex items-center bg-white border border-cream-200 rounded-lg overflow-hidden flex-shrink-0">
-                        <button
-                          onClick={() => updateItem(idx, { qty: Math.max(1, (item.qty || 1) - 1) })}
-                          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
-                          aria-label="Kam karein"
-                        >
-                          <Minus size={13} />
-                        </button>
-                        <span className="min-w-[24px] text-center text-sm font-bold text-zinc-800 tabular-nums">
-                          {item.qty}
-                        </span>
-                        <button
-                          onClick={() => updateItem(idx, { qty: (item.qty || 1) + 1 })}
-                          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
-                          aria-label="Zyada karein"
-                        >
-                          <Plus size={13} />
-                        </button>
+                {parsedItems.length === 0 && unrecognised.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-xs text-zinc-400 leading-relaxed">
+                    Cart khaali hai.<br/>
+                    Saamaan dhoondhke add karein <span className="text-zinc-300">↑</span>
+                    {' '}ya AI se add karein <span className="text-zinc-300">↑</span>
+                  </div>
+                ) : (
+                  <>
+                    {ackLink && (
+                      <div className="px-3 pt-2.5">
+                        <WAButton href={ackLink} label="Acknowledge receipt" />
                       </div>
+                    )}
 
-                      <span className="text-xs font-bold text-zinc-700 tabular-nums w-12 text-right flex-shrink-0">
-                        ₹{(item.price * item.qty).toFixed(0)}
-                      </span>
+                    <div className="divide-y divide-cream-50">
+                      {parsedItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-2.5 px-3 py-2.5 ${item.inStock ? '' : 'bg-red-50/40'}`}
+                        >
+                          <button
+                            onClick={() => setSwapTarget({ idx, item })}
+                            className="flex-1 min-w-0 text-left active:opacity-70"
+                            title="Tap to swap this item"
+                          >
+                            <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
+                            <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+                              ₹{item.price} / {item.unit}
+                              {item.sourceLine && <> · from: "{item.sourceLine}"</>}
+                              {!item.inStock && <span className="ml-1 text-red-500 font-bold">OOS</span>}
+                            </p>
+                          </button>
 
-                      <button
-                        onClick={() => setParsedItems(p => p.filter((_, i) => i !== idx))}
-                        className="text-zinc-300 active:text-red-400 flex-shrink-0"
-                        aria-label="Remove item"
-                      >
-                        <X size={15} />
-                      </button>
+                          <div className="flex items-center bg-white border border-cream-200 rounded-lg overflow-hidden flex-shrink-0">
+                            <button
+                              onClick={() => updateItem(idx, { qty: Math.max(1, (item.qty || 1) - 1) })}
+                              className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
+                              aria-label="Kam karein"
+                            >
+                              <Minus size={13} />
+                            </button>
+                            <span className="min-w-[24px] text-center text-sm font-bold text-zinc-800 tabular-nums">
+                              {item.qty}
+                            </span>
+                            <button
+                              onClick={() => updateItem(idx, { qty: (item.qty || 1) + 1 })}
+                              className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
+                              aria-label="Zyada karein"
+                            >
+                              <Plus size={13} />
+                            </button>
+                          </div>
+
+                          <span className="text-xs font-bold text-zinc-700 tabular-nums w-12 text-right flex-shrink-0">
+                            ₹{(item.price * item.qty).toFixed(0)}
+                          </span>
+
+                          <button
+                            onClick={() => setParsedItems(p => p.filter((_, i) => i !== idx))}
+                            className="text-zinc-300 active:text-red-400 flex-shrink-0"
+                            aria-label="Remove item"
+                          >
+                            <X size={15} />
+                          </button>
+                        </div>
+                      ))}
+
+                      {unrecognised.map((u, idx) => (
+                        <div key={idx} className="px-3 py-2.5">
+                          <UnrecognisedItem
+                            item={u}
+                            onAddToCatalog={async (name, price) => {
+                              try {
+                                const product = await addProduct({
+                                  name,
+                                  price: Number(price) || 0,
+                                  unit:  guessUnit(name) || 'pc',
+                                  category: guessCategory(name) || 'Other',
+                                  inStock: true,
+                                })
+                                setParsedItems(p => [...p, {
+                                  productId:   product.id,
+                                  productName: product.name,
+                                  qty:         u.qty || 1,
+                                  unit:        product.unit,
+                                  price:       product.price,
+                                  inStock:     true,
+                                  sourceLine:  u.originalLine,
+                                }])
+                                setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                                try {
+                                  const { api } = await import('../api/client.js')
+                                  api.post('/api/corrections', {
+                                    rawLine:   u.originalLine,
+                                    productId: product.id,
+                                  }).catch(() => {})
+                                } catch {}
+                                toast(`${product.name} catalog me jud gaya`, 'success')
+                              } catch (e) { toast(e.message, 'error') }
+                            }}
+                            onAddOneOff={(name, price, qty) => {
+                              setParsedItems(p => [...p, {
+                                productId:   null,
+                                productName: name,
+                                qty:         qty || 1,
+                                unit:        guessUnit(name) || 'pc',
+                                price,
+                                inStock:     true,
+                              }])
+                              setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                            }}
+                            onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
 
-                  {unrecognised.map((u, idx) => (
-                    <div key={idx} className="px-3 py-2.5">
-                      <UnrecognisedItem
-                        item={u}
-                        onAddToCatalog={async (name, price) => {
-                          try {
-                            const product = await addProduct({
-                              name,
-                              price: Number(price) || 0,
-                              unit:  guessUnit(name) || 'pc',
-                              category: guessCategory(name) || 'Other',
-                              inStock: true,
-                            })
-                            setParsedItems(p => [...p, {
-                              productId:   product.id,
-                              productName: product.name,
-                              qty:         u.qty || 1,
-                              unit:        product.unit,
-                              price:       product.price,
-                              inStock:     true,
-                              sourceLine:  u.originalLine,
-                            }])
-                            setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                            try {
-                              const { api } = await import('../api/client.js')
-                              api.post('/api/corrections', {
-                                rawLine:   u.originalLine,
-                                productId: product.id,
-                              }).catch(() => {})
-                            } catch {}
-                            toast(`${product.name} catalog me jud gaya`, 'success')
-                          } catch (e) { toast(e.message, 'error') }
-                        }}
-                        onAddOneOff={(name, price, qty) => {
-                          setParsedItems(p => [...p, {
-                            productId:   null,
-                            productName: name,
-                            qty:         qty || 1,
-                            unit:        guessUnit(name) || 'pc',
-                            price,
-                            inStock:     true,
-                          }])
-                          setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                        }}
-                        onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {parsedItems.length > 0 && (
-                  <div className="px-4 py-2.5 bg-cream-50 border-t border-cream-100 flex justify-between items-center">
-                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Total</span>
-                    <span className="text-lg font-extrabold text-zinc-900 tabular-nums">₹{total.toFixed(0)}</span>
-                  </div>
+                    {parsedItems.length > 0 && (
+                      <div className="px-4 py-2.5 bg-cream-50 border-t border-cream-100 flex justify-between items-center">
+                        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{itemCount} item · Total</span>
+                        <span className="text-lg font-extrabold text-zinc-900 tabular-nums">₹{total.toFixed(0)}</span>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </div>
-
-          {oosLink && (
-            <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 active:!bg-red-100" />
-          )}
-
-          {/* ── 4. Payment — Single "Paid" field, auto-derived Bakaya ── */}
-          {parsedItems.length > 0 && (
-            <div className="card space-y-2.5">
-              <div>
-                <label className="field-label">Paisa diya</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">₹</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    className="input-field pl-8 pr-20 text-base font-bold tabular-nums"
-                    placeholder={total.toFixed(0)}
-                    value={paid}
-                    onChange={e => setPaid(e.target.value)}
-                  />
-                  <button
-                    onClick={() => setPaid(total.toFixed(0))}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-extrabold px-2 py-1 rounded-md active:bg-emerald-50"
-                  >
-                    PURA
-                  </button>
-                </div>
               </div>
 
-              <div className={`flex items-center justify-between text-sm rounded-xl px-3 py-2 ${
-                overpaid
-                  ? 'bg-red-50 border border-red-100'
-                  : remaining > 0
-                    ? 'bg-amber-50/60'
-                    : 'bg-emerald-50/60'
-              }`}>
-                <span className="font-semibold text-zinc-600">
-                  {overpaid ? 'Zyada paise diye' : remaining > 0 ? 'Bakaya (udhaar pe jaayega)' : 'Pura paid hua'}
-                </span>
-                <span className={`font-extrabold tabular-nums ${
-                  overpaid
-                    ? 'text-red-600'
-                    : remaining > 0
-                      ? 'text-amber-600'
-                      : 'text-emerald-600'
-                }`}>
-                  {overpaid
-                    ? `−₹${(paidNum - total).toFixed(0)}`
-                    : `₹${remaining.toFixed(0)}`}
-                </span>
-              </div>
-
-              {customerPhone && (
-                <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none px-1 pt-0.5">
-                  <input
-                    type="checkbox"
-                    checked={sendWaReceipt}
-                    onChange={e => setSendWaReceipt(e.target.checked)}
-                    className="rounded"
-                  />
-                  WhatsApp receipt bhejo (+91 {customerPhone})
-                </label>
+              {oosLink && (
+                <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 active:!bg-red-100" />
               )}
-            </div>
+
+              {/* ── Sticky "Aage Badho" — only enabled when cart has items ── */}
+              <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100">
+                <button
+                  onClick={() => canContinue && setStep('review')}
+                  disabled={!canContinue}
+                  className="btn-primary py-3.5 text-sm flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  Aage Badho — Customer aur Payment
+                  {canContinue && <ChevronRight size={16} />}
+                </button>
+              </div>
+            </>
           )}
 
-          {/* ── 5. Sticky save ─────────────────────────────────────────── */}
-          {parsedItems.length > 0 && (
-            <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100">
+          {step === 'review' && (
+            <>
+              {/* ── Compact cart summary chip with edit-back ─────────── */}
               <button
-                onClick={confirmOrder}
-                disabled={overpaid}
-                className="btn-primary py-3.5 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                onClick={() => setStep('items')}
+                className="card w-full text-left flex items-center gap-3 active:bg-cream-50 transition-colors"
               >
-                <Check size={16} />
-                Save Order — ₹{total.toFixed(0)}
-                {remaining > 0 && !overpaid && (
-                  <span className="text-amber-100 font-bold ml-0.5">· ₹{remaining.toFixed(0)} udhaar</span>
-                )}
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <ShoppingBag size={16} className="text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-zinc-900">{itemCount} item · ₹{total.toFixed(0)}</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                    {parsedItems.slice(0, 3).map(i => i.productName).join(', ')}
+                    {itemCount > 3 && ` +${itemCount - 3} aur`}
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-emerald-600">Edit ↑</span>
               </button>
-            </div>
+
+              {/* ── Customer ─────────────────────────────────────────── */}
+              <div className="space-y-2">
+                <RecentCustomerChips
+                  orders={orders}
+                  customers={customers}
+                  current={customerPhone || customerName}
+                  onPick={c => {
+                    setCustomerName(c.name)
+                    setCustomerPhone(c.phone || '')
+                    setCustSearch(c.name)
+                    setShowCustDrop(false)
+                  }}
+                />
+                <CustomerSelectOnly
+                  customers={customers}
+                  name={customerName}
+                  phone={customerPhone}
+                  search={custSearch}
+                  showDrop={showCustDrop}
+                  onSearchChange={val => {
+                    setCustSearch(val)
+                    setCustomerName(val)
+                    // Clear phone — re-derived only when user picks from the list.
+                    setCustomerPhone('')
+                    setShowCustDrop(true)
+                  }}
+                  onSelect={c => {
+                    setCustomerName(c.name)
+                    setCustomerPhone(c.phone || '')
+                    setCustSearch(c.name)
+                    setShowCustDrop(false)
+                  }}
+                  onBlur={() => setTimeout(() => setShowCustDrop(false), 150)}
+                  onFocus={() => setShowCustDrop(true)}
+                />
+              </div>
+
+              {/* ── Payment ──────────────────────────────────────────── */}
+              <div className="card space-y-2.5">
+                <div>
+                  <label className="field-label">Paisa diya</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">₹</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      className="input-field pl-8 pr-20 text-base font-bold tabular-nums"
+                      placeholder={total.toFixed(0)}
+                      value={paid}
+                      onChange={e => setPaid(e.target.value)}
+                    />
+                    <button
+                      onClick={() => setPaid(total.toFixed(0))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-extrabold px-2 py-1 rounded-md active:bg-emerald-50"
+                    >
+                      PURA
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`flex items-center justify-between text-sm rounded-xl px-3 py-2 ${
+                  overpaid
+                    ? 'bg-red-50 border border-red-100'
+                    : remaining > 0
+                      ? 'bg-amber-50/60'
+                      : 'bg-emerald-50/60'
+                }`}>
+                  <span className="font-semibold text-zinc-600">
+                    {overpaid ? 'Zyada paise diye' : remaining > 0 ? 'Bakaya (udhaar pe jaayega)' : 'Pura paid hua'}
+                  </span>
+                  <span className={`font-extrabold tabular-nums ${
+                    overpaid
+                      ? 'text-red-600'
+                      : remaining > 0
+                        ? 'text-amber-600'
+                        : 'text-emerald-600'
+                  }`}>
+                    {overpaid
+                      ? `−₹${(paidNum - total).toFixed(0)}`
+                      : `₹${remaining.toFixed(0)}`}
+                  </span>
+                </div>
+
+                {customerPhone && (
+                  <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none px-1 pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={sendWaReceipt}
+                      onChange={e => setSendWaReceipt(e.target.checked)}
+                      className="rounded"
+                    />
+                    WhatsApp receipt bhejo (+91 {customerPhone})
+                  </label>
+                )}
+              </div>
+
+              {/* ── Sticky save row ──────────────────────────────────── */}
+              <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100 flex gap-2">
+                <button
+                  onClick={() => setStep('items')}
+                  className="px-4 py-3.5 rounded-2xl text-sm font-bold text-zinc-500 active:bg-cream-100 active:scale-[0.98] transition-transform"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={confirmOrder}
+                  disabled={overpaid || !customerSelected}
+                  className="btn-primary flex-1 py-3.5 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Check size={16} />
+                  Save Order — ₹{total.toFixed(0)}
+                  {remaining > 0 && !overpaid && (
+                    <span className="text-amber-100 font-bold ml-0.5">· ₹{remaining.toFixed(0)} udhaar</span>
+                  )}
+                </button>
+              </div>
+            </>
           )}
         </div>
           )
@@ -1291,6 +1354,112 @@ function RecentCustomerChips({ orders, customers, current, onPick }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// StepDot — small numbered circle in the 2-step wizard's progress header.
+// `done` = completed earlier step (filled, with checkmark)
+// `active` = current step (filled, highlighted)
+// neither = upcoming step (outlined, muted)
+function StepDot({ num, label, active, done, clickable, onClick }) {
+  const stateClass = done
+    ? 'bg-emerald-500 text-white border-emerald-500'
+    : active
+      ? 'bg-emerald-500 text-white border-emerald-500 ring-4 ring-emerald-100'
+      : 'bg-white text-zinc-400 border-cream-200'
+  return (
+    <button
+      type="button"
+      onClick={clickable && onClick ? onClick : undefined}
+      disabled={!clickable}
+      className={`flex items-center gap-2 px-1 py-0.5 rounded-lg ${clickable ? 'active:bg-cream-50' : 'cursor-default'}`}
+    >
+      <span className={`w-6 h-6 rounded-full border-2 text-[11px] font-extrabold flex items-center justify-center transition-colors ${stateClass}`}>
+        {done ? '✓' : num}
+      </span>
+      <span className={`text-[11px] font-bold uppercase tracking-wider ${active ? 'text-zinc-900' : done ? 'text-emerald-700' : 'text-zinc-400'}`}>
+        {label}
+      </span>
+    </button>
+  )
+}
+
+// CustomerSelectOnly — same dropdown UX as CustomerPicker but WITHOUT the
+// separate phone input. The phone is read-only context: shown as a chip
+// when the selected name matches an existing customer record. New names
+// (typed but not in the customer list) are saved with no phone — the
+// shopkeeper can add it later from the Khaata page.
+function CustomerSelectOnly({ customers, name, phone, search, showDrop, onSearchChange, onSelect, onBlur, onFocus }) {
+  const matches = search.trim().length > 0
+    ? customers.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        (c.phone || '').includes(search)
+      ).slice(0, 6)
+    : customers.slice(0, 6)   // show 6 recents when focused empty
+
+  const selected = customers.find(c => c.name === name)
+  const isNew    = !!name.trim() && !selected
+
+  return (
+    <div className="space-y-1.5">
+      <label className="field-label">Customer *</label>
+      <div className="relative">
+        <input
+          className="input-field pr-8"
+          placeholder="Naam dhoondein ya naya likhein…"
+          value={search}
+          onChange={e => onSearchChange(e.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          autoComplete="off"
+        />
+        {search && (
+          <button
+            onMouseDown={e => { e.preventDefault(); onSearchChange('') }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+          >
+            <X size={14} />
+          </button>
+        )}
+        {showDrop && matches.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl overflow-hidden z-30"
+               style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)' }}>
+            {matches.map(c => (
+              <button
+                key={c.id}
+                onMouseDown={e => { e.preventDefault(); onSelect(c) }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-cream-50 active:bg-cream-100 border-b border-cream-50 last:border-0"
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${(c.udhaar||0) > 0 ? 'bg-orange-100 text-orange-600' : 'bg-zinc-100 text-zinc-600'}`}>
+                  {c.name[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-zinc-900 truncate">{c.name}</p>
+                  {c.phone && <p className="text-xs text-zinc-400">+91 {c.phone}</p>}
+                </div>
+                {(c.udhaar||0) > 0 && (
+                  <span className="text-xs font-bold text-orange-500 flex-shrink-0">₹{c.udhaar} due</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Selected-customer chip OR "Naya customer" chip */}
+      {selected && (
+        <p className="text-[11px] text-zinc-500 px-1">
+          {phone
+            ? <>Phone: <span className="font-semibold text-zinc-700">+91 {phone}</span></>
+            : <span className="text-zinc-400 italic">Phone nahi hai — Khaata se add kar sakte hain</span>}
+        </p>
+      )}
+      {isNew && (
+        <p className="text-[11px] text-emerald-600 font-semibold px-1">
+          ✦ Naya customer — phone baad mein add kar sakte hain
+        </p>
+      )}
     </div>
   )
 }
