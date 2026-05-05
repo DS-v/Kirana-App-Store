@@ -1,64 +1,46 @@
 # Nixpacks build config for the kirana backend.
 #
 # whatsapp-web.js drives WhatsApp Web through a Chromium that Puppeteer
-# launches. Two approaches were tried before this one:
+# launches. Approaches we ruled out:
 #
-#   1. apt install chromium → fails on Ubuntu Noble (24.04) because the
-#      `chromium` apt package is a snap wrapper. Snap doesn't work in
-#      Railway's container, so Puppeteer's launch hangs forever and
-#      WASetup is stuck on "Starting…".
-#   2. Listing every Chrome runtime lib explicitly → the t64 transition
-#      in Noble renamed lots of them (libasound2 → libasound2t64, etc.)
-#      and trying to keep a portable list across Debian/Ubuntu base
-#      images is fragile.
+#   1. apt install chromium → on Ubuntu Noble (24.04) this is a snap
+#      wrapper. Snap doesn't run in Railway's container; Puppeteer's
+#      launch hangs / fails silently.
+#   2. Listing every Chrome runtime lib explicitly with t64 suffixes →
+#      fragile. Some libs got the t64 rename on Noble (libasound2,
+#      libcups2, libglib2.0-0, libgtk-3-0, libatk-bridge2.0-0,
+#      libatk1.0-0), some didn't (libpango-1.0-0, libcairo2, libnss3).
+#      Maintaining the right list per base image is a moving target.
 #
-# Current approach (works, robust):
-#   • Don't install chromium via apt.
-#   • Let Puppeteer download its bundled Chrome at npm install time
-#     (no PUPPETEER_SKIP_DOWNLOAD env var). This gives us a real
-#     non-snap Chromium binary that Puppeteer manages.
-#   • Install only the runtime libs Chrome NEEDS at launch via aptPkgs,
-#     using the t64 names where Noble requires them. apt resolves the
-#     handful of further libs automatically through dependencies.
-#   • Don't set PUPPETEER_EXECUTABLE_PATH — Puppeteer finds its own
-#     bundled Chrome. backend/src/whatsapp/client.js gates on the env
-#     var so this is a no-op there.
+# Current approach: install Google Chrome from Google's official apt
+# repo. The .deb declares all of its runtime deps (the right t64 names
+# included), apt resolves them automatically, and we get a real binary
+# that works in containers. PUPPETEER_SKIP_DOWNLOAD=true makes npm
+# install skip Puppeteer's bundled-Chrome download (~150 MB saved).
 
 [phases.setup]
 aptPkgs = [
-  # Fonts — chromium recommends but doesn't depend on these. Without them
-  # WhatsApp Web's headless rendering shows boxes for emoji / Indic text.
+  "wget",
+  "gnupg",
+  "ca-certificates",
   "fonts-liberation",
   "fonts-noto-color-emoji",
   "fonts-indic",
-
-  # Runtime libs Puppeteer's bundled Chrome dlopens. Using t64 names where
-  # Ubuntu Noble has renamed them; the rest stay as-is.
-  "ca-certificates",
-  "libasound2t64",
-  "libatk-bridge2.0-0t64",
-  "libatk1.0-0t64",
-  "libcairo2",
-  "libcups2t64",
-  "libdbus-1-3",
-  "libexpat1",
-  "libfontconfig1",
-  "libgbm1",
-  "libglib2.0-0t64",
-  "libgtk-3-0t64",
-  "libnspr4",
-  "libnss3",
-  "libpango-1.0-0t64",
-  "libx11-6",
-  "libxcb1",
-  "libxcomposite1",
-  "libxdamage1",
-  "libxext6",
-  "libxfixes3",
-  "libxkbcommon0",
-  "libxrandr2",
-  "xdg-utils",
+]
+cmds = [
+  # Add Google's apt signing key to a keyring file (apt-key is deprecated)
+  "wget -qO- https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg",
+  # Add Google's apt repo restricted to amd64 + signed by the keyring above
+  "echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main' | sudo tee /etc/apt/sources.list.d/google-chrome.list",
+  "sudo apt-get update -qq",
+  # google-chrome-stable's deb declares its own runtime deps — apt fetches
+  # libnss3, libcups2t64, libgtk-3-0t64, the right libpango / libatk
+  # variants, etc. No manual lib enumeration needed.
+  "sudo apt-get install -y --no-install-recommends google-chrome-stable",
 ]
 
-# (intentionally no PUPPETEER_SKIP_DOWNLOAD / PUPPETEER_EXECUTABLE_PATH —
-#  see the long comment at the top of this file.)
+[variables]
+# Skip Puppeteer's bundled-Chrome download — we have google-chrome-stable
+# at /usr/bin/google-chrome-stable, which client.js picks up via the env var.
+PUPPETEER_SKIP_DOWNLOAD     = "true"
+PUPPETEER_EXECUTABLE_PATH   = "/usr/bin/google-chrome-stable"
