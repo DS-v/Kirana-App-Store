@@ -110,11 +110,44 @@ export default function Orders() {
     })
   }
 
+  // Apply a parser result (items + unrecognised) to the cart staging.
+  // While the AI flow is open we ACCUMULATE — voice + photo + paste should
+  // all add up across modes. Outside the AI flow (rare; only the share-
+  // target deeplink) we replace.
+  // Dedup rules:
+  //   • items with the same productId → qty += new qty
+  //   • items with productId=null (one-offs) always append
+  //   • unrecognised → dedup by lowercased originalLine
+  function applyParseResult(items, unrec) {
+    if (!aiOpen) {
+      setParsedItems(items)
+      setUnrecognised(unrec)
+      return
+    }
+    setParsedItems(prev => {
+      const merged = [...prev]
+      for (const it of items) {
+        const idx = it.productId ? merged.findIndex(c => c.productId === it.productId) : -1
+        if (idx >= 0) merged[idx] = { ...merged[idx], qty: (merged[idx].qty || 1) + (it.qty || 1) }
+        else merged.push(it)
+      }
+      return merged
+    })
+    setUnrecognised(prev => {
+      const seen = new Set(prev.map(u => (u.originalLine || '').toLowerCase().trim()))
+      const next = [...prev]
+      for (const u of unrec) {
+        const key = (u.originalLine || '').toLowerCase().trim()
+        if (!seen.has(key)) { next.push(u); seen.add(key) }
+      }
+      return next
+    })
+  }
+
   // Rule-based fallback — always available, zero latency
   function runRuleBased(text) {
     const { items, unrecognised: unk } = parseOrderMessage(text, products)
-    setParsedItems(items)
-    setUnrecognised(unk)
+    applyParseResult(items, unk)
     return { items, unrecognised: unk }
   }
 
@@ -147,8 +180,7 @@ export default function Orders() {
       if (resp.ok) {
         const { items: llmItems, unrecognised: llmUnk } = await resp.json()
         const enriched = enrichItems(llmItems)
-        setParsedItems(enriched)
-        setUnrecognised(llmUnk)
+        applyParseResult(enriched, llmUnk)
         const msg = `${enriched.length} item${enriched.length !== 1 ? 's' : ''} parsed (AI)${llmUnk.length ? `, ${llmUnk.length} unrecognised` : ''}`
         toast(msg, enriched.length ? 'success' : 'info')
         return
@@ -187,8 +219,7 @@ export default function Orders() {
   // Image: vision OCR'd + matched. Stash the OCR text so it can be shown
   // in the staging panel ("Read from image: ...").
   function handleImageItems({ items, unrecognised: unk, source, ocrText }) {
-    setParsedItems(items)
-    setUnrecognised(unk)
+    applyParseResult(items, unk)
     if (ocrText) setAiInputSummary({ kind: 'photo', text: ocrText })
     setShowNew(true)
     const msg = `${items.length} item${items.length !== 1 ? 's' : ''} matched${unk.length ? `, ${unk.length} unrecognised` : ''}`
@@ -213,6 +244,95 @@ export default function Orders() {
 
   function updateItem(idx, patch) {
     setParsedItems(items => items.map((it, i) => i === idx ? { ...it, ...patch } : it))
+  }
+
+  // Push an item into parsedItems, incrementing qty if same productId already
+  // present (one-offs with productId=null always append).
+  function addOrIncrementCartItem(newItem) {
+    setParsedItems(prev => {
+      const idx = newItem.productId ? prev.findIndex(c => c.productId === newItem.productId) : -1
+      if (idx >= 0) {
+        const updated = [...prev]
+        updated[idx] = { ...updated[idx], qty: (updated[idx].qty || 1) + (newItem.qty || 1) }
+        return updated
+      }
+      return [...prev, newItem]
+    })
+  }
+
+  // Build the four handlers UnrecognisedItem needs. Same logic at both call
+  // sites (once outside AI flow if it ever fires there, once inside) — DRY.
+  function makeUnrecHandlers(u, idx) {
+    const removeUnrec = () => setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+    return {
+      onAssignExisting: async (product, qty, rawLine) => {
+        // Add the existing catalog product to the cart with the user's qty
+        addOrIncrementCartItem({
+          productId:   product.id,
+          productName: product.name,
+          qty:         qty || 1,
+          unit:        product.unit || 'pc',
+          price:       product.price ?? 0,
+          inStock:     product.inStock ?? true,
+          sourceLine:  rawLine,
+        })
+        removeUnrec()
+        // Record the correction so the parser learns this mapping.
+        if (rawLine && product.id) {
+          try {
+            const { api } = await import('../api/client.js')
+            api.post('/api/corrections', {
+              rawLine,
+              productId: product.id,
+            }).catch(() => {})
+          } catch {}
+        }
+        toast(`${product.name} cart me daal diya`, 'success')
+      },
+      onAddToCatalog: async (name, price, qty) => {
+        try {
+          const product = await addProduct({
+            name,
+            price: Number(price) || 0,
+            unit:  guessUnit(name) || 'pc',
+            category: guessCategory(name) || 'Other',
+            inStock: true,
+          })
+          addOrIncrementCartItem({
+            productId:   product.id,
+            productName: product.name,
+            qty:         qty || 1,
+            unit:        product.unit,
+            price:       product.price,
+            inStock:     true,
+            sourceLine:  u.originalLine,
+          })
+          removeUnrec()
+          if (u.originalLine) {
+            try {
+              const { api } = await import('../api/client.js')
+              api.post('/api/corrections', {
+                rawLine:   u.originalLine,
+                productId: product.id,
+              }).catch(() => {})
+            } catch {}
+          }
+          toast(`${product.name} catalog me jud gaya`, 'success')
+        } catch (e) { toast(e.message, 'error') }
+      },
+      onAddOneOff: (name, price, qty) => {
+        addOrIncrementCartItem({
+          productId:   null,
+          productName: name,
+          qty:         qty || 1,
+          unit:        guessUnit(name) || 'pc',
+          price:       price || 0,
+          inStock:     true,
+        })
+        removeUnrec()
+      },
+      onSkip: removeUnrec,
+    }
   }
 
   // ── AI flow helpers ────────────────────────────────────────────────────────
@@ -530,21 +650,20 @@ export default function Orders() {
                 <div className="px-3 pt-3 pb-2 border-b border-cream-100">
                   <ProductSearchAdd
                     products={products}
-                    onAdd={(p) => {
-                      setParsedItems(items => {
-                        const existing = items.findIndex(it => it.productId === p.id)
-                        if (existing >= 0) {
-                          return items.map((it, i) => i === existing ? { ...it, qty: (it.qty || 1) + 1 } : it)
-                        }
-                        return [...items, {
-                          productId:   p.id,
-                          productName: p.name,
-                          qty:         1,
-                          unit:        p.unit || 'pc',
-                          price:       p.price ?? 0,
-                          inStock:     p.inStock ?? true,
-                        }]
-                      })
+                    onAdd={(p) => addOrIncrementCartItem({
+                      productId:   p.id,
+                      productName: p.name,
+                      qty:         1,
+                      unit:        p.unit || 'pc',
+                      price:       p.price ?? 0,
+                      inStock:     p.inStock ?? true,
+                    })}
+                    onAddCustom={(rawLine) => {
+                      // Push to the unrecognised list so the same Catalog-se-
+                      // chunein / Naya saamaan / Skip flow handles it. The
+                      // user can then either assign to an existing catalog
+                      // product or create a brand-new one.
+                      setUnrecognised(prev => [...prev, { originalLine: rawLine, qty: 1 }])
                     }}
                   />
                 </div>
@@ -578,47 +697,8 @@ export default function Orders() {
                         <div key={idx} className="px-3 py-2.5">
                           <UnrecognisedItem
                             item={u}
-                            onAddToCatalog={async (name, price) => {
-                              try {
-                                const product = await addProduct({
-                                  name,
-                                  price: Number(price) || 0,
-                                  unit:  guessUnit(name) || 'pc',
-                                  category: guessCategory(name) || 'Other',
-                                  inStock: true,
-                                })
-                                setParsedItems(p => [...p, {
-                                  productId:   product.id,
-                                  productName: product.name,
-                                  qty:         u.qty || 1,
-                                  unit:        product.unit,
-                                  price:       product.price,
-                                  inStock:     true,
-                                  sourceLine:  u.originalLine,
-                                }])
-                                setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                                try {
-                                  const { api } = await import('../api/client.js')
-                                  api.post('/api/corrections', {
-                                    rawLine:   u.originalLine,
-                                    productId: product.id,
-                                  }).catch(() => {})
-                                } catch {}
-                                toast(`${product.name} catalog me jud gaya`, 'success')
-                              } catch (e) { toast(e.message, 'error') }
-                            }}
-                            onAddOneOff={(name, price, qty) => {
-                              setParsedItems(p => [...p, {
-                                productId:   null,
-                                productName: name,
-                                qty:         qty || 1,
-                                unit:        guessUnit(name) || 'pc',
-                                price,
-                                inStock:     true,
-                              }])
-                              setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                            }}
-                            onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
+                            products={products}
+                            {...makeUnrecHandlers(u, idx)}
                           />
                         </div>
                       ))}
@@ -839,47 +919,8 @@ export default function Orders() {
                       <div key={idx} className="px-3 py-2.5">
                         <UnrecognisedItem
                           item={u}
-                          onAddToCatalog={async (name, price) => {
-                            try {
-                              const product = await addProduct({
-                                name,
-                                price: Number(price) || 0,
-                                unit:  guessUnit(name) || 'pc',
-                                category: guessCategory(name) || 'Other',
-                                inStock: true,
-                              })
-                              setParsedItems(p => [...p, {
-                                productId:   product.id,
-                                productName: product.name,
-                                qty:         u.qty || 1,
-                                unit:        product.unit,
-                                price:       product.price,
-                                inStock:     true,
-                                sourceLine:  u.originalLine,
-                              }])
-                              setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                              try {
-                                const { api } = await import('../api/client.js')
-                                api.post('/api/corrections', {
-                                  rawLine:   u.originalLine,
-                                  productId: product.id,
-                                }).catch(() => {})
-                              } catch {}
-                              toast(`${product.name} catalog me jud gaya`, 'success')
-                            } catch (e) { toast(e.message, 'error') }
-                          }}
-                          onAddOneOff={(name, price, qty) => {
-                            setParsedItems(p => [...p, {
-                              productId:   null,
-                              productName: name,
-                              qty:         qty || 1,
-                              unit:        guessUnit(name) || 'pc',
-                              price,
-                              inStock:     true,
-                            }])
-                            setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                          }}
-                          onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
+                          products={products}
+                          {...makeUnrecHandlers(u, idx)}
                         />
                       </div>
                     ))}
@@ -1299,88 +1340,223 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
 }
 
 // ── Unrecognised line-item recovery ─────────────────────────────────────────
-// Shown when the parser couldn't match a pasted/voice line to any catalog
-// product. Three exits: add to catalog (persists), add one-off (just this
-// order), or skip. Inline so the shopkeeper never has to leave the order.
-function UnrecognisedItem({ item, onAddToCatalog, onAddOneOff, onSkip }) {
-  const [open, setOpen]   = useState(false)
-  const [name, setName]   = useState(item.productName || item.originalLine || '')
-  const [price, setPrice] = useState('')
+// Shown when the parser couldn't match a pasted/voice/photo line to any
+// catalog product. Four exits:
+//   • Catalog se chunein  — search and assign to an EXISTING product. Records
+//                            an active-learning correction so future parses
+//                            of this raw line skip the LLM. This is the most
+//                            common case (AI just missed a known product).
+//   • Naya saamaan        — type a brand-new name + price. Save to catalog
+//                            permanently OR use one-time for just this order.
+//   • Qty stepper          — adjust quantity in place before any of the above.
+//   • Skip                 — drop the line entirely.
+//
+// `products` prop powers the catalog search dropdown.
+function UnrecognisedItem({ item, products = [], onAssignExisting, onAddToCatalog, onAddOneOff, onSkip }) {
+  const [mode, setMode]   = useState(null)  // null | 'pick' | 'new'
   const [qty, setQty]     = useState(item.qty || 1)
 
-  const numPrice = parseFloat(price) || 0
-  const valid    = name.trim().length > 0 && numPrice > 0
+  const rawLine = item.originalLine || item.productName || ''
 
   return (
-    <div className="bg-amber-50 rounded-xl p-3 space-y-2 animate-fade-up">
-      <div className="flex items-center gap-2">
-        <AlertCircle size={15} className="text-amber-500 flex-shrink-0" />
-        <p className="text-xs font-semibold text-zinc-700 flex-1 truncate">
-          "{item.originalLine || item.productName}" — catalog me nahi hai
-        </p>
-        {!open && (
+    <div className="bg-amber-50/70 rounded-xl p-3 space-y-2.5 animate-fade-up border border-amber-100">
+      {/* Header line — original text + qty stepper + close */}
+      <div className="flex items-start gap-2">
+        <AlertCircle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+            Match nahi mila
+          </p>
+          <p className="text-sm font-semibold text-zinc-800 truncate">"{rawLine}"</p>
+        </div>
+        <div className="flex items-center bg-white border border-amber-200 rounded-lg overflow-hidden flex-shrink-0">
           <button
-            onClick={() => setOpen(true)}
-            className="text-[11px] font-bold text-emerald-600 px-2 py-1 rounded-lg hover:bg-emerald-50"
+            onClick={() => setQty(Math.max(1, qty - 1))}
+            className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-amber-50"
+            aria-label="Kam"
           >
-            Fix karein
+            <Minus size={12} />
           </button>
-        )}
+          <span className="min-w-[22px] text-center text-xs font-bold text-zinc-800 tabular-nums">{qty}</span>
+          <button
+            onClick={() => setQty(qty + 1)}
+            className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-amber-50"
+            aria-label="Zyada"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
         <button
           onClick={onSkip}
-          className="text-[11px] font-bold text-zinc-400 px-2 py-1 rounded-lg hover:bg-zinc-100"
+          className="w-7 h-7 flex items-center justify-center text-zinc-300 active:text-red-400 flex-shrink-0"
+          aria-label="Skip"
           title="Hata do"
         >
-          Skip
+          <X size={14} />
         </button>
       </div>
 
-      {open && (
-        <>
-          <div className="grid grid-cols-[1fr_70px_60px] gap-2">
-            <input
-              className="input-field py-1.5 text-sm"
-              placeholder="Product naam"
-              value={name}
-              onChange={e => setName(e.target.value)}
-            />
-            <input
-              type="number"
-              inputMode="numeric"
-              className="input-field py-1.5 text-sm"
-              placeholder="₹ price"
-              value={price}
-              onChange={e => setPrice(e.target.value)}
-              autoFocus
-            />
-            <input
-              type="number"
-              inputMode="numeric"
-              className="input-field py-1.5 text-sm text-center"
-              placeholder="Qty"
-              value={qty}
-              onChange={e => setQty(parseFloat(e.target.value) || 1)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => valid && onAddToCatalog(name.trim(), numPrice, qty)}
-              disabled={!valid}
-              className="py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
-            >
-              Catalog me add karein
-            </button>
-            <button
-              onClick={() => valid && onAddOneOff(name.trim(), numPrice, qty)}
-              disabled={!valid}
-              className="py-2 bg-white border border-zinc-200 text-zinc-600 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
-              title="Sirf is order ke liye, catalog me save nahi hoga"
-            >
-              Sirf is order ke liye
-            </button>
-          </div>
-        </>
+      {/* Action chooser — three primary CTAs, evenly spaced */}
+      {!mode && (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setMode('pick')}
+            className="py-2 px-3 bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+          >
+            <Search size={13} /> Catalog se chunein
+          </button>
+          <button
+            onClick={() => setMode('new')}
+            className="py-2 px-3 bg-white border border-amber-200 text-amber-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+          >
+            <Plus size={13} /> Naya saamaan
+          </button>
+        </div>
       )}
+
+      {/* Mode A — search and assign an existing catalog product */}
+      {mode === 'pick' && (
+        <UnrecPickFromCatalog
+          products={products}
+          initialQuery={rawLine}
+          onCancel={() => setMode(null)}
+          onPick={(p) => onAssignExisting?.(p, qty, rawLine)}
+        />
+      )}
+
+      {/* Mode B — create a brand-new product */}
+      {mode === 'new' && (
+        <UnrecAddNew
+          initialName={rawLine}
+          qty={qty}
+          onCancel={() => setMode(null)}
+          onAddToCatalog={(name, price) => onAddToCatalog(name, price, qty)}
+          onAddOneOff={(name, price) => onAddOneOff(name, price, qty)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Mode-A panel: live filter the catalog by the typed query, tap a row to
+// assign. Pre-fills with the unmatched line so the most likely candidate
+// is usually one of the top matches.
+function UnrecPickFromCatalog({ products, initialQuery, onPick, onCancel }) {
+  const [q, setQ] = useState(initialQuery || '')
+  const matches = (() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return products.slice(0, 8)
+    const tokens = term.split(/\s+/).filter(Boolean)
+    return products
+      .map(p => {
+        const hay = (p.name + ' ' + (p.aliases || []).join(' ')).toLowerCase()
+        const sub = hay.includes(term) ? 3 : 0
+        const tok = tokens.reduce((n, t) => n + (hay.includes(t) ? 1 : 0), 0)
+        return { p, score: sub + tok }
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name))
+      .slice(0, 8)
+      .map(({ p }) => p)
+  })()
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <input
+          autoFocus
+          className="input-field pl-9 py-2 text-sm"
+          placeholder="Catalog me dhoondein…"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+        />
+        <button
+          onClick={onCancel}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-zinc-400 px-2 py-1 rounded active:bg-zinc-100"
+        >
+          Wapas
+        </button>
+      </div>
+      {matches.length > 0 ? (
+        <div className="bg-white rounded-xl border border-amber-100 overflow-hidden divide-y divide-cream-50">
+          {matches.map(p => (
+            <button
+              key={p.id}
+              onClick={() => onPick(p)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left active:bg-amber-50/60"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-zinc-900 truncate">{p.name}</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  ₹{p.price} / {p.unit}
+                  {!p.inStock && <span className="ml-1.5 text-red-500 font-bold">Khatam</span>}
+                </p>
+              </div>
+              <Check size={14} className="text-emerald-500 flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-500 px-1">
+          Koi match nahi. Naya saamaan add karne ke liye "Wapas" → "Naya saamaan" daboh.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Mode-B panel: name + price form. Two save modes (catalog persistent, or
+// one-time only).
+function UnrecAddNew({ initialName, qty, onAddToCatalog, onAddOneOff, onCancel }) {
+  const [name, setName]   = useState(initialName || '')
+  const [price, setPrice] = useState('')
+  const numPrice = parseFloat(price) || 0
+  const valid = name.trim().length > 0 && numPrice > 0
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-[1fr_90px] gap-2">
+        <input
+          autoFocus
+          className="input-field py-2 text-sm"
+          placeholder="Product naam"
+          value={name}
+          onChange={e => setName(e.target.value)}
+        />
+        <input
+          type="number"
+          inputMode="numeric"
+          className="input-field py-2 text-sm"
+          placeholder="₹ price"
+          value={price}
+          onChange={e => setPrice(e.target.value)}
+        />
+      </div>
+      <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+        <button
+          onClick={() => valid && onAddToCatalog(name.trim(), numPrice)}
+          disabled={!valid}
+          className="py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+          title="Catalog me hamesha ke liye save"
+        >
+          Catalog me save
+        </button>
+        <button
+          onClick={() => valid && onAddOneOff(name.trim(), numPrice)}
+          disabled={!valid}
+          className="py-2 bg-white border border-amber-200 text-amber-700 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+          title="Sirf is order ke liye, catalog me save nahi hoga"
+        >
+          Sirf abhi
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-3 py-2 text-zinc-400 active:text-zinc-700 text-xs font-bold"
+        >
+          Wapas
+        </button>
+      </div>
     </div>
   )
 }
@@ -1582,7 +1758,7 @@ function CompactVoiceTile({ onResult, onInterim }) {
 
 // Search the catalog and add one item at a time to the cart. Autocomplete
 // ranks by token overlap + substring — same approach as ItemSwap.
-function ProductSearchAdd({ products, onAdd }) {
+function ProductSearchAdd({ products, onAdd, onAddCustom }) {
   const [q, setQ]       = useState('')
   const [open, setOpen] = useState(false)
 
@@ -1602,6 +1778,14 @@ function ProductSearchAdd({ products, onAdd }) {
       .map(({ p }) => p)
     return ranked
   })()
+
+  const trimmed = q.trim()
+  const exactInCatalog = !!products.find(
+    p => (p.name || '').toLowerCase() === trimmed.toLowerCase(),
+  )
+  // Show "Add as new" CTA whenever the typed term doesn't match a catalog
+  // entry exactly — covers both no-match and "I want a one-off variant".
+  const showAddNew = !!trimmed && !exactInCatalog && !!onAddCustom
 
   return (
     <div className="space-y-1.5">
@@ -1627,7 +1811,7 @@ function ProductSearchAdd({ products, onAdd }) {
           </button>
         )}
 
-        {open && matches.length > 0 && (
+        {open && (matches.length > 0 || showAddNew) && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-2xl overflow-hidden z-30"
                style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)' }}>
             {matches.map(p => (
@@ -1646,6 +1830,23 @@ function ProductSearchAdd({ products, onAdd }) {
                 <Plus size={14} className="text-emerald-500 flex-shrink-0" />
               </button>
             ))}
+            {/* "Add as new" — pushes the typed term into the unrecognised
+                pipeline so the user gets the same Catalog-se-chunein /
+                Naya-saamaan / Skip choice as AI-detected unmatched lines. */}
+            {showAddNew && (
+              <button
+                onMouseDown={e => { e.preventDefault(); onAddCustom(trimmed); setQ(''); setOpen(false) }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left bg-amber-50/50 hover:bg-amber-50 active:bg-amber-100 transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <Plus size={14} className="text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-zinc-900 truncate">"{trimmed}" add karein</p>
+                  <p className="text-[11px] text-amber-700 mt-0.5">Catalog me nahi hai — naya banayein ya assign karein</p>
+                </div>
+              </button>
+            )}
           </div>
         )}
       </div>
