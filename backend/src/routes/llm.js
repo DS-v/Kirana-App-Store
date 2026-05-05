@@ -717,7 +717,7 @@ async function embedCached(shopId, name) {
 // (quota / network), the item gets an empty candidate list — the match LLM
 // will treat it as unrecognised. Embeddings are cached per (shop, name) so
 // common terms cost zero API calls on repeat use.
-async function shortlistPerItem(items, shopId, topK = 15) {
+async function shortlistPerItem(items, shopId, topK = 20) {
   return Promise.all(items.map(async (it) => {
     try {
       const queryVec = await embedCached(shopId, it.name)
@@ -785,17 +785,14 @@ function splitByConfidence(shortlistedItems) {
 // candidate set so the LLM can disambiguate variants (size, brand, "lal
 // wala") with full context.
 //
-// Prompt-size guard: cap candidates per item to keep the prompt bounded
-// regardless of order size. With default cap=10, a 30-item order produces
-// ~25K tokens — well under llama-3.1-8b's 128K context. For genuinely huge
-// orders (>30 items), we drop further to 5 candidates each so the prompt
-// fits cleanly with room for the model's output.
-function buildMatchPrompt(originalMessage, shortlistedItems, candidatesPerItem = 10) {
-  // Adaptive: very long orders shrink the candidate slice further.
-  const slice = shortlistedItems.length > 30 ? 5 : candidatesPerItem
-
-  const itemBlocks = shortlistedItems.map((it, idx) => {
-    const top = it.candidates.slice(0, slice)
+// IMPORTANT: this function builds the prompt for a SINGLE BATCH of items.
+// Long orders are split into ~8-item batches that run in parallel so each
+// match LLM call stays focused (avoids the "lost in the middle" effect
+// where LLMs lose attention quality on large parallel-task prompts).
+// See runMatchInBatches below.
+function buildMatchPrompt(originalMessage, batchItems, candidatesPerItem = 20) {
+  const itemBlocks = batchItems.map((it, idx) => {
+    const top = it.candidates.slice(0, candidatesPerItem)
     const cands = top.length
       ? top.map(c => {
           const aliases = c.aliases?.length ? ` [aliases: ${c.aliases.join(', ')}]` : ''
@@ -895,6 +892,65 @@ function top1Fallback(shortlistedItems, minSimilarity = 0.75) {
   return { items, unrecognised }
 }
 
+// ── Batched parallel match LLM ────────────────────────────────────────────────
+// Why batch: LLM attention quality degrades when one prompt asks the model to
+// match many parallel items at once. The "lost in the middle" effect — items
+// in the middle of the prompt get less attention than items at the start or
+// end — is well-documented across model families. Splitting into ≤8-item
+// batches keeps each prompt focused; running batches concurrently keeps
+// wall-clock latency close to a single LLM call.
+//
+// 8-item batch with 20 candidates each:
+//   instructions ~600 tokens
+//   message      ~200 tokens
+//   8 × 20 cands ~3200 tokens
+//   total        ~4000 tokens (well under 8b's 128K context, with headroom)
+//
+// Each batch falls back independently: if one batch's LLM call fails, only
+// that batch's items go through top-1 fallback — the others are unaffected.
+
+const MATCH_BATCH_SIZE = 8
+
+async function matchOneBatch(message, batchItems) {
+  const prompt    = buildMatchPrompt(message, batchItems, 20)
+  const providers = [['groq', callGroqJSON], ['gemini', callGeminiJSON]]
+  for (const [name, fn] of providers) {
+    try {
+      const raw = await fn(prompt, { maxTokens: 1536 })
+      const out = validateMatchOutput(raw, batchItems)
+      return { ...out, _provider: `match-${name}` }
+    } catch (e) {
+      console.warn(`[LLM] match-${name} batch failed:`, e.message)
+    }
+  }
+  // Both providers down for this batch — top-1 fallback for its items only.
+  return { ...top1Fallback(batchItems, 0.78), _provider: 'match-top1-fallback' }
+}
+
+async function runMatchInBatches(message, ambiguousItems) {
+  if (ambiguousItems.length === 0) {
+    return { items: [], unrecognised: [], sources: [] }
+  }
+
+  // Slice into batches of MATCH_BATCH_SIZE.
+  const batches = []
+  for (let i = 0; i < ambiguousItems.length; i += MATCH_BATCH_SIZE) {
+    batches.push(ambiguousItems.slice(i, i + MATCH_BATCH_SIZE))
+  }
+
+  // All batches in parallel. Each batch handles its own provider fallback,
+  // so a single bad batch can't take the whole order down.
+  const batchResults = await Promise.all(
+    batches.map(batch => matchOneBatch(message, batch)),
+  )
+
+  return {
+    items:        batchResults.flatMap(r => r.items),
+    unrecognised: batchResults.flatMap(r => r.unrecognised),
+    sources:      batchResults.map(r => r._provider),
+  }
+}
+
 // Legacy whole-message single-shot pipeline. Used as a fallback when the
 // per-item path can't run (extract LLM down, embeddings quota'd, etc.).
 async function parseOrderTextLegacy({ message, llmInput, preItems, shopId, catalog }) {
@@ -971,38 +1027,34 @@ async function parseOrderText({ message, shopId, catalog }) {
     return { ...merged, source: extractSource, preMatched: preItems.length }
   }
 
-  // 2. Per-item shortlist: parallel embed (with cache) + pgvector top-15.
-  const shortlisted = await shortlistPerItem(extracted.items, shopId, 15)
+  // 2. Per-item shortlist: parallel embed (with cache) + pgvector top-20.
+  const shortlisted = await shortlistPerItem(extracted.items, shopId, 20)
 
   // 2a. Confidence shortcut: items with a clear top-1 winner skip the match
   //     LLM entirely. Only ambiguous items reach stage 3.
   const { resolved, ambiguous } = splitByConfidence(shortlisted)
 
-  // 3. Match LLM — only invoked if any items remain ambiguous after the
-  //    confidence shortcut. If every item resolved deterministically, we
-  //    skip stage 3 completely (saves ~1 s and one LLM call).
-  let matched      = { items: [], unrecognised: [] }
-  let matchSource  = ambiguous.length === 0 ? 'shortcut' : null
+  // 3. Match LLM — batched into chunks of ~8 items each, run in parallel.
+  //    Why: a single LLM call asking it to match 30 items in one prompt
+  //    suffers "lost in the middle" attention degradation. Chunking keeps
+  //    each prompt focused (~4K tokens with 20 candidates per item) while
+  //    parallel dispatch keeps wall-clock latency close to a single call.
+  //    If every item resolved deterministically, no LLM call fires at all.
+  const matchResult = await runMatchInBatches(message, ambiguous)
+  const matched     = { items: matchResult.items, unrecognised: matchResult.unrecognised }
 
-  if (ambiguous.length > 0) {
-    const matchFailures = []
-    const matchPrompt   = buildMatchPrompt(message, ambiguous, 10)
-    for (const [name, fn] of [['groq', callGroqJSON], ['gemini', callGeminiJSON]]) {
-      try {
-        const raw = await fn(matchPrompt, { maxTokens: 1536 })
-        matched = validateMatchOutput(raw, ambiguous)
-        matchSource = `match-${name}`
-        break
-      } catch (e) {
-        console.warn(`[LLM] ${name} match failed:`, e.message)
-        matchFailures.push(`match-${name}: ${e.message}`)
-      }
-    }
-    // Both match LLMs failed — top-1 fallback for the ambiguous items only.
-    if (!matchSource) {
-      console.warn('[LLM] match stage failed for both providers — top-1 fallback')
-      matched     = top1Fallback(ambiguous, 0.78)
-      matchSource = 'match-top1-fallback'
+  let matchSource
+  if (ambiguous.length === 0) {
+    matchSource = 'shortcut'
+  } else {
+    // Compose a tag like "match-groq" or "match-{groq+top1-fallback}" if
+    // batches landed on different providers. Lets ops see split-brain cases.
+    const unique = [...new Set(matchResult.sources)]
+    matchSource = unique.length === 1
+      ? unique[0]
+      : `match-mixed(${unique.map(s => s.replace(/^match-/, '')).join('+')})`
+    if (matchResult.sources.length > 1) {
+      matchSource += `[${matchResult.sources.length}batches]`
     }
   }
 
