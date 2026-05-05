@@ -21,17 +21,29 @@ import qrcode from 'qrcode'
 import supabase from '../db.js'
 
 // ── state ─────────────────────────────────────────────────────────────────────
-let _client   = null
-let _qrRaw    = null   // raw QR string (for conversion to data-URL on demand)
-let _ready    = false
-let _shopId   = null
+let _client       = null
+let _qrRaw        = null   // raw QR string (for conversion to data-URL on demand)
+let _ready        = false
+let _shopId       = null
+let _initStartTs  = 0      // when initWhatsApp was last called — used to detect
+                           // stuck launches in getStatus()
+let _initError    = null   // last fatal error message, surfaced to the frontend
 
 // ── public API ────────────────────────────────────────────────────────────────
 export function getStatus() {
+  // If init kicked off >75 s ago and we still don't have a QR or a ready
+  // connection, treat it as stuck. Without this, the frontend spinner would
+  // wait forever — common when Chromium itself failed to launch (snap
+  // wrapper, missing libs, sandbox issue) and never emitted any event.
+  let stuck = null
+  if (_client && !_ready && !_qrRaw && _initStartTs && (Date.now() - _initStartTs) > 75_000) {
+    stuck = `WhatsApp client did not produce a QR after 75s — Chromium likely failed to launch. Check backend logs for the launch error.`
+  }
   return {
     connected: _ready,
     hasQR:     !!_qrRaw && !_ready,
     shopId:    _shopId,
+    error:     _initError || stuck || null,
   }
 }
 
@@ -46,12 +58,14 @@ export async function getQRDataURL() {
  */
 export function initWhatsApp(shopId) {
   if (_client) return   // already running
-  _shopId = shopId
+  _shopId      = shopId
+  _initStartTs = Date.now()
+  _initError   = null
 
-  // Pull the Chromium path from PUPPETEER_EXECUTABLE_PATH (set in the
-  // Dockerfile to /usr/bin/chromium). If the env var is unset (local dev
-  // without our Dockerfile), let Puppeteer use whatever Chrome it
-  // downloaded itself at install time.
+  // Optional override — for local dev / debugging when you want to point at
+  // a specific Chrome binary. Production leaves this unset and Puppeteer
+  // uses its own bundled Chrome (real binary, not Ubuntu Noble's snap
+  // wrapper which won't run in containers).
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined
 
   _client = new Client({
@@ -125,6 +139,18 @@ export function initWhatsApp(shopId) {
     if (error) console.error('[WA] Failed to store message:', error.message)
   })
 
-  _client.initialize()
+  // initialize() returns a Promise that rejects when Puppeteer fails to
+  // launch Chrome (snap wrapper, missing libs, sandbox failure). Catching
+  // it here lets us record the message instead of silently never emitting
+  // a 'qr' event — which is what was producing the stuck "Starting…" spinner.
+  _client.initialize().catch(err => {
+    _initError = `WhatsApp init failed: ${err?.message || String(err)}`
+    console.error('[WA] initialize() rejected:', err)
+    // Tear down so a retry triggers a fresh launch.
+    try { _client?.destroy?.() } catch {}
+    _client = null
+    _qrRaw  = null
+    _ready  = false
+  })
   console.log('[WA] Client initialising — this may take ~30 s on first run…')
 }

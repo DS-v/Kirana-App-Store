@@ -68,17 +68,25 @@ export default function WASetup() {
       return
     }
 
-    // Poll until QR appears or connection established
+    // Poll until QR appears, connection establishes, or backend reports an
+    // init error. Without the error branch the spinner would run forever
+    // when Chromium fails to launch (snap wrapper, missing libs, etc.).
     timerRef.current = setInterval(async () => {
       try {
         const status = await api.get('/api/whatsapp/status')
-        if (status.connected) {
+        if (status?.error) {
+          clearInterval(timerRef.current)
+          setErrMsg(status.error)
+          setPhase('error')
+          return
+        }
+        if (status?.connected) {
           clearInterval(timerRef.current)
           setPhase('connected')
           setQrSrc(null)
           return
         }
-        if (status.hasQR) {
+        if (status?.hasQR) {
           const { qr } = await api.get('/api/whatsapp/qr')
           setQrSrc(qr)
           setPhase('qr')
