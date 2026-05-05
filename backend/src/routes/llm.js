@@ -208,25 +208,33 @@ async function callGeminiVisionOCR(imageBase64, mimeType) {
 
 // ── Groq — text ───────────────────────────────────────────────────────────────
 
-async function callGroq(message, catalog) {
+// ── Generic JSON-LLM call helpers ─────────────────────────────────────────────
+// Used by every text-LLM caller (extract, match, legacy text parse). Keeps
+// the fetch wiring in exactly one place per provider.
+
+async function callGroqJSON(prompt, { maxTokens = 1024 } = {}) {
   const key = process.env.GROQ_API_KEY
   if (!key) throw new Error('GROQ_API_KEY not set')
-
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'llama-3.1-8b-instant',
-      messages: [{ role: 'user', content: buildTextPrompt(message, catalog) }],
+      messages: [{ role: 'user', content: prompt }],
       temperature: 0,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       response_format: { type: 'json_object' },
     }),
   })
-
-  if (!res.ok) throw new Error(`Groq error ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`)
   const data = await res.json()
   return JSON.parse(data.choices[0].message.content)
+}
+
+// Legacy single-shot text parser. Kept as a fallback path for parseOrderText
+// when the per-item pipeline (extract → shortlist → match) can't run.
+async function callGroq(message, catalog) {
+  return callGroqJSON(buildTextPrompt(message, catalog))
 }
 
 // ── Groq — vision ─────────────────────────────────────────────────────────────
@@ -266,26 +274,29 @@ async function callGroqVision(imageBase64, mimeType, _catalog, promptOverride) {
 
 // ── Gemini — text ─────────────────────────────────────────────────────────────
 
-async function callGemini(message, catalog) {
+async function callGeminiJSON(prompt, { maxTokens = 1024 } = {}) {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY not set')
-
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: buildTextPrompt(message, catalog) }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 1024, responseMimeType: 'application/json' },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: maxTokens, responseMimeType: 'application/json' },
       }),
     }
   )
-
-  if (!res.ok) throw new Error(`Gemini error ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`)
   const data = await res.json()
   const raw  = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
   return JSON.parse(raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim())
+}
+
+// Legacy single-shot text parser (Gemini side) — same role as callGroq.
+async function callGemini(message, catalog) {
+  return callGeminiJSON(buildTextPrompt(message, catalog))
 }
 
 // ── Gemini — vision ───────────────────────────────────────────────────────────
@@ -587,22 +598,249 @@ async function vectorPreFilter(message, shopId, fullCatalog, topK = 30) {
   }
 }
 
-// ── The shared text-parse pipeline ────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-item parsing pipeline
 //
-// One implementation, three callers:
-//   • POST /parse-order    — text and voice (voice is browser STT → text)
-//   • POST /parse-image    — calls vision OCR first to get text, then this
-//   • (future)             — any new input modality (telephony, email, etc.)
-//                             can plug into this same function.
+// Goal: each extracted item gets its OWN candidate set from pgvector, so an
+// order mixing distant categories ("do maggi, ek soap, paanch agarbatti")
+// doesn't lose items because one shared embedding had to compromise across
+// noodles + soap + incense.
 //
-// Stages: corrections fast-path → vector pre-filter → LLM (Groq → Gemini
-// fallback) → post-processors. Returns the same shape the frontend already
-// consumes; throws an Error with .status and .detail on hard failure so each
-// route can map that to its own response.
+// Stages:
+//   0. Corrections fast-path (raw lines)            — PR #5, unchanged
+//   1. Extract LLM (no catalog)                     — { name, qty, unit }*
+//   2. Per-item shortlist: parallel embed +         — each item gets its own
+//      pgvector top-K                                  top-15 candidate set
+//   3. Match LLM (single batched call)              — picks productId per item
+//      with each item's candidates inline              from THAT item's set
+//   4. postProcess — same guards as the legacy path (dropPhantoms, foodCat,
+//      dedupAcrossLists, ensureLineCoverage)
+//
+// Graceful degradation: any failure in stages 1–3 falls back to the legacy
+// single-shot whole-message pipeline, so the service stays useful even when
+// the embedding API is rate-limited.
+// ─────────────────────────────────────────────────────────────────────────────
 
+// Stage 1: extract-only prompt (no catalog, just OCR-style extraction).
+function buildExtractPrompt(message) {
+  return `You are an extractor for an Indian kirana (grocery) store. Read the customer's message and pull each ORDER ITEM into a list. The catalog is NOT shown to you — that's intentional; do NOT guess product IDs or invent products.
+
+For each line that looks like an order item, output:
+- name: the product as written by the customer, raw (e.g. "Maggi", "P-G", "lal wala tel", "atta"). Preserve Hindi / Hinglish / Devanagari as-is.
+- qty: the quantity (number). Default 1 if unspecified.
+- unit: the unit if explicitly written (kg, g, litre, ml, packet, bottle, dozen, pc) — else null.
+
+QUANTITY RULES:
+- Hindi/Hinglish numbers: ek=1, do=2, teen=3, char=4, paanch=5, chhe=6, saat=7, aath=8, nau=9, das=10.
+- Devanagari: एक=1, दो=2, तीन=3, चार=4, पाँच=5, छह=6, सात=7, आठ=8, नौ=9, दस=10.
+- Number+unit attached to a name ("200g vim bar", "1kg aata") = SIZE → qty=1.
+- Standalone leading number ("5 anda", "do bottle thums") = qty.
+
+SKIP non-item lines: greetings, names, phone numbers, dates, totals, "thanks", payment notes, signatures.
+
+If a line has product-shaped text but you genuinely can't read it, push it to "unrecognised" with the raw text and a qty.
+
+MESSAGE:
+"""
+${message}
+"""
+
+Reply with ONLY valid JSON, no markdown, no commentary:
+{
+  "items": [
+    { "name": "<as written>", "qty": <number>, "unit": "<unit or null>" }
+  ],
+  "unrecognised": [
+    { "originalLine": "<raw>", "qty": <number> }
+  ]
+}`
+}
+
+function validateExtract(obj) {
+  if (!obj || typeof obj !== 'object') throw new Error('Extract LLM returned non-object')
+  const items = (Array.isArray(obj.items) ? obj.items : [])
+    .map(it => ({
+      name: String(it.name || '').trim(),
+      qty:  Number(it.qty) || 1,
+      unit: it.unit ? String(it.unit) : null,
+    }))
+    .filter(it => it.name)
+  const unrecognised = (Array.isArray(obj.unrecognised) ? obj.unrecognised : [])
+    .map(u => ({ originalLine: String(u.originalLine || ''), qty: Number(u.qty) || 1 }))
+    .filter(u => u.originalLine)
+  return { items, unrecognised }
+}
+
+// Stage 2: for each extracted item, embed its name and pull top-K candidates
+// from pgvector. Embeds run in PARALLEL (Promise.all), so a 5-item order
+// pays roughly the cost of one embed call wall-clock. If embedding fails
+// (quota / network), the item gets an empty candidate list — the match LLM
+// will treat it as unrecognised.
+async function shortlistPerItem(items, shopId, topK = 15) {
+  return Promise.all(items.map(async (it) => {
+    try {
+      const queryVec = await embed(it.name)
+      const { data, error } = await db.rpc('match_products', {
+        p_shop:      shopId,
+        p_embedding: queryVec,
+        p_top_k:     topK,
+      })
+      if (error || !data?.length) return { ...it, candidates: [] }
+      return {
+        ...it,
+        candidates: data.map(p => ({
+          id:      p.id,
+          name:    p.name,
+          unit:    p.unit,
+          aliases: p.aliases || [],
+          // Include similarity so the match LLM (and the deterministic
+          // shortcut, when we add one) can use it as a tiebreak signal.
+          similarity: Number(p.similarity ?? 0),
+        })),
+      }
+    } catch (e) {
+      console.warn(`[LLM] per-item embed failed for "${it.name}":`, e.message)
+      return { ...it, candidates: [] }
+    }
+  }))
+}
+
+// Stage 3: match prompt. Each item shows the customer's wording AND its own
+// candidate set so the LLM can disambiguate variants (size, brand, "lal
+// wala") with full context.
+function buildMatchPrompt(originalMessage, shortlistedItems) {
+  const itemBlocks = shortlistedItems.map((it, idx) => {
+    const cands = it.candidates.length
+      ? it.candidates.map(c => {
+          const aliases = c.aliases?.length ? ` [aliases: ${c.aliases.join(', ')}]` : ''
+          return `    - id="${c.id}" :: ${c.name}${aliases}`
+        }).join('\n')
+      : '    (no candidates — mark as unrecognised)'
+    return `Item ${idx + 1}:
+  customer wrote: "${it.name}" (qty=${it.qty}${it.unit ? `, unit=${it.unit}` : ''})
+  candidates:
+${cands}`
+  }).join('\n\n')
+
+  return `You match customer-written kirana order items to specific catalog products. The customer's full message is shown for context. For each numbered item, pick the SINGLE BEST candidate ID, or mark UNRECOGNISED if none of the candidates fit.
+
+ABSOLUTE RULES:
+R0  productId MUST be one of the ids listed under that item's candidates. Never invent ids. Never copy ids across items.
+
+R1  CONSERVATIVE MATCH. Pick a candidate only when it's clearly the same kind of thing. Otherwise UNRECOGNISED.
+
+R2  CATEGORY WALL. FOOD (anda/egg, dudh/milk, atta, dal, namak, cheeni, masala, vegetables, fruits, paneer, ghee, dahi, lassi, ice cream, biscuit, chocolate, chips) NEVER matches NON-FOOD (Band-Aid, soap, shampoo, cream, hair oil, detergent, dishwash, toothpaste, agarbatti, candle, batteries, stationery). Even if names share letters or sizes match.
+
+R3  SIZE / VARIANT DISAMBIGUATION. When the customer's wording specifies a size, brand, or color hint (e.g. "Maggi 70g", "Amul Toned Milk 1L", "lal wala tel"), pick the candidate that matches that hint. Default to the smallest size when nothing is specified.
+
+R4  HINGLISH / DEVANAGARI MAP TO ENGLISH CATALOG NAMES. Examples — dudh/doodh = milk; atta/aata = wheat flour; namak = salt; cheeni = sugar; tel = oil; magi/mggi = Maggi; P-G/PG = Parle-G; A milk = Amul Milk.
+
+R5  NO INFLATING qty. Use the customer's stated quantity for the matched item; do NOT recalculate from the catalog.
+
+CUSTOMER MESSAGE:
+"""
+${originalMessage}
+"""
+
+ITEMS TO RESOLVE:
+
+${itemBlocks}
+
+Reply with ONLY valid JSON, no markdown, no commentary:
+{
+  "items": [
+    { "itemIndex": <1-based number>, "productId": "<one of the candidate ids>", "productName": "<that candidate's name>", "qty": <number>, "unit": "<unit or null>" }
+  ],
+  "unrecognised": [
+    { "itemIndex": <1-based number>, "originalLine": "<customer's wording>", "qty": <number> }
+  ]
+}
+
+Every item from the input MUST appear in EXACTLY ONE of items / unrecognised.`
+}
+
+function validateMatchOutput(obj, shortlistedItems) {
+  if (!obj || typeof obj !== 'object') throw new Error('Match LLM returned non-object')
+  // Build an id→candidate lookup so we can validate productIds came from the
+  // candidates we sent (LLM hallucination guard).
+  const validIds = new Set()
+  for (const it of shortlistedItems) for (const c of it.candidates) validIds.add(c.id)
+
+  const items = (Array.isArray(obj.items) ? obj.items : [])
+    .map(it => ({
+      productId:   String(it.productId   || ''),
+      productName: String(it.productName || ''),
+      qty:         Number(it.qty)  || 1,
+      unit:        it.unit ? String(it.unit) : null,
+      itemIndex:   Number(it.itemIndex) || null,
+    }))
+    .filter(it => it.productId && it.productName && validIds.has(it.productId))
+
+  const unrecognised = (Array.isArray(obj.unrecognised) ? obj.unrecognised : [])
+    .map(u => ({
+      originalLine: String(u.originalLine || ''),
+      qty:          Number(u.qty) || 1,
+      itemIndex:    Number(u.itemIndex) || null,
+    }))
+    .filter(u => u.originalLine)
+
+  return { items, unrecognised }
+}
+
+// Top-1 fallback used when the match LLM is completely unavailable: take each
+// item's highest-similarity candidate provided it's confident enough. Keeps
+// the system useful through outages at the cost of some accuracy.
+function top1Fallback(shortlistedItems, minSimilarity = 0.75) {
+  const items = []
+  const unrecognised = []
+  for (const it of shortlistedItems) {
+    const top = it.candidates[0]
+    if (top && top.similarity >= minSimilarity) {
+      items.push({
+        productId:   top.id,
+        productName: top.name,
+        qty:         it.qty,
+        unit:        it.unit ?? top.unit ?? null,
+      })
+    } else {
+      unrecognised.push({ originalLine: it.name, qty: it.qty || 1 })
+    }
+  }
+  return { items, unrecognised }
+}
+
+// Legacy whole-message single-shot pipeline. Used as a fallback when the
+// per-item path can't run (extract LLM down, embeddings quota'd, etc.).
+async function parseOrderTextLegacy({ message, llmInput, preItems, shopId, catalog }) {
+  const focusCatalog = await vectorPreFilter(llmInput, shopId, catalog, 30)
+  const merge = (llmResult) => postProcess(
+    { items: [...preItems, ...llmResult.items], unrecognised: llmResult.unrecognised },
+    message, catalog,
+  )
+  const failures = []
+  try {
+    const out = validate(await callGroq(llmInput, focusCatalog))
+    return { ...merge(out), source: 'legacy-groq', preMatched: preItems.length }
+  } catch (e) {
+    console.warn('[LLM] legacy Groq failed:', e.message)
+    failures.push(`legacy-groq: ${e.message}`)
+  }
+  try {
+    const out = validate(await callGemini(llmInput, focusCatalog))
+    return { ...merge(out), source: 'legacy-gemini', preMatched: preItems.length }
+  } catch (e) {
+    console.warn('[LLM] legacy Gemini failed:', e.message)
+    failures.push(`legacy-gemini: ${e.message}`)
+  }
+  const err = new Error('LLM unavailable')
+  err.status = 503
+  err.detail = failures.join(' | ')
+  throw err
+}
+
+// ── parseOrderText: the per-item pipeline ─────────────────────────────────────
 async function parseOrderText({ message, shopId, catalog }) {
-  // 1. Active-learning fast-path. Lines with remembered corrections never
-  //    hit the LLM. Saves latency + tokens on every repeat order.
+  // 0. Active-learning fast-path on raw lines.
   let preItems = []
   let llmInput = message
   try {
@@ -611,42 +849,92 @@ async function parseOrderText({ message, shopId, catalog }) {
     if (preMatched.length) llmInput = residualLines.join('\n').trim()
   } catch (e) { console.warn('[LLM] correction lookup failed:', e.message) }
 
-  // 2. Vector pre-filter. Send only the top-30 semantically-similar products
-  //    to the LLM rather than the full 1000+.
-  const focusCatalog = await vectorPreFilter(llmInput, shopId, catalog, 30)
-
-  // 3. Short-circuit if every line resolved from corrections.
+  // Short-circuit if everything resolved from corrections.
   if (preItems.length && !llmInput.trim()) {
     return { items: preItems, unrecognised: [], source: 'corrections', preMatched: preItems.length }
   }
 
-  const merge = (llmResult) => postProcess(
-    { items: [...preItems, ...llmResult.items], unrecognised: llmResult.unrecognised },
+  // 1. Extract LLM — get { name, qty, unit } per item, no catalog needed.
+  let extracted = null
+  let extractSource = null
+  const extractFailures = []
+  for (const [name, fn] of [['groq', callGroqJSON], ['gemini', callGeminiJSON]]) {
+    try {
+      const raw = await fn(buildExtractPrompt(llmInput), { maxTokens: 1024 })
+      extracted = validateExtract(raw)
+      extractSource = `extract-${name}`
+      break
+    } catch (e) {
+      console.warn(`[LLM] ${name} extract failed:`, e.message)
+      extractFailures.push(`extract-${name}: ${e.message}`)
+    }
+  }
+
+  // If extraction failed entirely, fall back to the legacy whole-message path.
+  if (!extracted) {
+    console.warn('[LLM] extract stage failed for both providers — falling back to legacy single-shot')
+    return parseOrderTextLegacy({ message, llmInput, preItems, shopId, catalog })
+  }
+
+  // No items? Done — push any unrecognised lines through postProcess.
+  if (extracted.items.length === 0) {
+    const merged = postProcess(
+      { items: preItems, unrecognised: extracted.unrecognised },
+      message, catalog,
+    )
+    return { ...merged, source: extractSource, preMatched: preItems.length }
+  }
+
+  // 2. Per-item shortlist: parallel embed + pgvector top-15 per item.
+  const shortlisted = await shortlistPerItem(extracted.items, shopId, 15)
+
+  // 3. Match LLM — single batched call, each item with its own candidate set.
+  let matched = null
+  let matchSource = null
+  const matchFailures = []
+  const matchPrompt = buildMatchPrompt(message, shortlisted)
+  for (const [name, fn] of [['groq', callGroqJSON], ['gemini', callGeminiJSON]]) {
+    try {
+      const raw = await fn(matchPrompt, { maxTokens: 1536 })
+      matched = validateMatchOutput(raw, shortlisted)
+      matchSource = `match-${name}`
+      break
+    } catch (e) {
+      console.warn(`[LLM] ${name} match failed:`, e.message)
+      matchFailures.push(`match-${name}: ${e.message}`)
+    }
+  }
+
+  // If match LLM is fully unavailable, take top-1 from each candidate set
+  // when similarity is high enough; otherwise mark unrecognised.
+  if (!matched) {
+    console.warn('[LLM] match stage failed for both providers — top-1 fallback')
+    matched = top1Fallback(shortlisted, 0.78)
+    matchSource = 'match-top1-fallback'
+  }
+
+  // 4. Combine matched items + LLM-marked unrecognised + extract-time
+  //    unrecognised, then post-process.
+  const merged = postProcess(
+    {
+      items: [
+        ...preItems,
+        ...matched.items.map(({ itemIndex, ...rest }) => rest),
+      ],
+      unrecognised: [
+        ...extracted.unrecognised,
+        ...matched.unrecognised.map(({ itemIndex, ...rest }) => rest),
+      ],
+    },
     message,
     catalog,
   )
 
-  // 4. Provider fallback chain.
-  const failures = []
-  try {
-    const out = validate(await callGroq(llmInput, focusCatalog))
-    return { ...merge(out), source: 'groq', preMatched: preItems.length }
-  } catch (e) {
-    console.warn('[LLM] Groq text failed:', e.message)
-    failures.push(`groq: ${e.message}`)
+  return {
+    ...merged,
+    source: `${extractSource} → ${matchSource}`,
+    preMatched: preItems.length,
   }
-  try {
-    const out = validate(await callGemini(llmInput, focusCatalog))
-    return { ...merge(out), source: 'gemini', preMatched: preItems.length }
-  } catch (e) {
-    console.warn('[LLM] Gemini text failed:', e.message)
-    failures.push(`gemini: ${e.message}`)
-  }
-
-  const err  = new Error('LLM unavailable')
-  err.status = 503
-  err.detail = failures.join(' | ')
-  throw err
 }
 
 router.post('/parse-order', async (req, res) => {
