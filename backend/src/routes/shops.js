@@ -13,14 +13,24 @@ router.get('/', async (req, res) => {
 })
 
 // POST /api/shops — create or update shop (upsert on every login)
+// Optional `upiId` lets the shopkeeper save their UPI VPA. The App-mount
+// upsert only sends `name`; preserve any existing upi_id in that case so
+// every login doesn't blank it out.
 router.post('/', async (req, res) => {
-  const { name } = req.body
+  const { name, upiId } = req.body
   if (!name) return res.status(400).json({ error: 'name is required' })
 
   const phone = req.user.phone || ''
 
+  const { data: existing } = await db.from('shops')
+    .select('upi_id').eq('id', req.userId).maybeSingle()
+
+  const payload = { id: req.userId, name, phone }
+  if (upiId !== undefined)         payload.upi_id = (upiId || '').trim() || null
+  else if (existing?.upi_id)       payload.upi_id = existing.upi_id
+
   const { data, error } = await db.from('shops')
-    .upsert({ id: req.userId, name, phone }, { onConflict: 'id' })
+    .upsert(payload, { onConflict: 'id' })
     .select()
     .single()
 

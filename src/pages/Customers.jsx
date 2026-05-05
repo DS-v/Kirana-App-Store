@@ -38,6 +38,8 @@ export default function Customers() {
   const addCustomer    = useStore(s => s.addCustomer)
   const updateCustomer = useStore(s => s.updateCustomer)
   const addUdhaar      = useStore(s => s.addUdhaar)
+  const upiId          = useStore(s => s.upiId)
+  const shopName       = useStore(s => s.shopName)
   const clearUdhaar    = useStore(s => s.clearUdhaar)
   const toast          = useToast()
   const [params]       = useSearchParams()
@@ -103,7 +105,7 @@ export default function Customers() {
   function yaadDilao(cust) {
     if (!cust.phone) return toast('Phone number nahi hai', 'error')
     if (!(cust.udhaar > 0)) return
-    window.open(sendUdhaarReminder(cust.phone, cust.name, cust.udhaar), '_blank')
+    window.open(sendUdhaarReminder(cust.phone, cust.name, cust.udhaar, { upiId, shopName }), '_blank')
   }
 
   async function paisaAaya(cust, fullPayment = false) {

@@ -92,7 +92,30 @@ router.post('/', async (req, res) => {
     if (itemErr) return res.status(500).json({ error: itemErr.message })
   }
 
-  res.status(201).json({ ...order, items: items ?? [] })
+  // Return the saved order in the same camelCase shape GET /api/orders uses,
+  // so the frontend can append it to its in-memory list directly without a
+  // refetch. (Previously POST returned raw snake_case rows, so the just-saved
+  // order showed up in the list with no customerName / total / etc. until
+  // the next fetchOrders.)
+  res.status(201).json({
+    id:            order.id,
+    customerName:  order.customer_name,
+    customerPhone: order.customer_phone,
+    status:        order.status,
+    total:         Number(order.total),
+    paidCash:      Number(order.paid_cash   ?? 0),
+    paidUpi:       Number(order.paid_upi    ?? 0),
+    paidUdhaar:    Number(order.paid_udhaar ?? 0),
+    rawMessage:    order.raw_message,
+    createdAt:     order.created_at,
+    items:         (items ?? []).map(i => ({
+      productId:   i.productId ?? null,
+      productName: i.productName,
+      qty:         Number(i.qty),
+      unit:        i.unit ?? 'pc',
+      price:       Number(i.price ?? 0),
+    })),
+  })
 })
 
 // PUT /api/orders/:id  (status update)

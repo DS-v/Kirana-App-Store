@@ -8,7 +8,7 @@ const tabs = [
   { to: '/orders',    icon: ShoppingBag,     label: 'Order Book' },
   { to: '/customers', icon: BookOpen,        label: 'Khaata' },
   { to: '/catalog',   icon: Package,         label: 'Saamaan' },
-  { to: '/',          icon: LayoutDashboard, label: 'Profile' },
+  { to: '/profile',   icon: LayoutDashboard, label: 'Profile' },
 ]
 
 // Inline gradient for the active pill — Tailwind's `bg-emerald-gradient`
@@ -40,7 +40,7 @@ export default function BottomNav() {
             <NavLink
               key={to}
               to={to}
-              end={to === '/'}
+              end
               className="flex-1 min-h-[44px] flex"
               aria-label={label}
             >
