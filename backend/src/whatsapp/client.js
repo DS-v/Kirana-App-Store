@@ -48,15 +48,24 @@ export function initWhatsApp(shopId) {
   if (_client) return   // already running
   _shopId = shopId
 
+  // Pull the Chromium path from PUPPETEER_EXECUTABLE_PATH (set in the
+  // Dockerfile to /usr/bin/chromium). If the env var is unset (local dev
+  // without our Dockerfile), let Puppeteer use whatever Chrome it
+  // downloaded itself at install time.
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+
   _client = new Client({
     authStrategy: new LocalAuth({ dataPath: './.wa-session' }),
     puppeteer: {
       headless: true,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--no-first-run',
+        '--no-default-browser-check',
       ],
     },
   })
