@@ -61,7 +61,7 @@ async function compressImage(file) {
   })
 }
 
-export default function ImageOrderScanner({ onItemsReady, onError }) {
+export default function ImageOrderScanner({ onItemsReady, onError, compact = false }) {
   const products = useStore(s => s.products)
 
   const [phase, setPhase]         = useState(PHASES.IDLE)
@@ -161,6 +161,26 @@ export default function ImageOrderScanner({ onItemsReady, onError }) {
 
   // ── IDLE ─────────────────────────────────────────────────────────────────────
   if (phase === PHASES.IDLE) {
+    // Compact: a single grid-cell-sized icon button. On phone the OS file
+    // picker offers Camera + Files; on desktop a regular file picker. One tap
+    // not two — same behavior either way.
+    if (compact) {
+      return (
+        <label className="flex flex-col items-center justify-center py-2.5 rounded-xl cursor-pointer transition-colors bg-white text-zinc-700 active:bg-cream-50 border border-cream-200">
+          <Camera size={16} className="text-violet-500" />
+          <span className="text-[10px] font-bold mt-1 leading-none">Photo</span>
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={e => processFile(e.target.files?.[0])}
+          />
+        </label>
+      )
+    }
+
     return (
       <div className="border border-dashed border-zinc-200 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-1.5">

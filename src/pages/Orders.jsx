@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle, Minus, Search } from 'lucide-react'
+import { Plus, MessageSquare, Check, X, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, BarChart2, List, TrendingUp, Clock, XCircle, Share2, Users, Package, AlertTriangle, Minus, Search, Sparkles, ClipboardPaste, ChevronRight } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useToast } from '../components/Toast'
 import WAButton from '../components/WAButton'
@@ -8,6 +8,7 @@ import VoiceButton from '../components/VoiceButton'
 import IncomingMessageBanner from '../components/IncomingMessageBanner'
 import ImageOrderScanner from '../components/ImageOrderScanner'
 import { parseOrderMessage, orderTotal } from '../utils/orderParser'
+import { isSpeechSupported, createRecognition } from '../utils/speech'
 import { STATUSES, STATUS_LABEL, STATUS_BADGE, STATUS_COLOR, STATUS_DOT, nextStatusOf, statusAdvanceToast } from '../utils/orderStatus'
 import SwipeableRow from '../components/SwipeableRow'
 import BottomSheet from '../components/BottomSheet'
@@ -66,8 +67,12 @@ export default function Orders() {
   const [showCustDrop, setShowCustDrop]   = useState(false)   // dropdown open?
   const [sendWaReceipt, setSendWaReceipt] = useState(true)    // opt-in WA receipt on save
   const [swapTarget, setSwapTarget]       = useState(null)    // {idx, item} when ItemSwap is open
-  const [orderStatus, setOrderStatus]     = useState('delivered')   // 'pending' | 'delivered' | 'cancelled'
-  const [pay, setPay] = useState({ cash: '', upi: '', udhaar: '' })
+  // Single "Paid" amount; status + payment-split derived on save.
+  // - paid >= total → status 'delivered', cash full, udhaar 0
+  // - 0 < paid < total → status 'pending', cash = paid, udhaar = total - paid
+  // - paid == 0 (or empty) → status 'pending', everything on udhaar
+  const [paid, setPaid]                   = useState('')
+  const [pasteOpen, setPasteOpen]         = useState(false)   // toggles paste textarea
   const parseDebounceRef                  = useRef(null)
   const lastParsedRef                     = useRef('')        // last text we auto-parsed
 
@@ -188,44 +193,47 @@ export default function Orders() {
   }
 
   async function confirmOrder() {
-    if (!customerName.trim()) return toast('Enter customer name', 'error')
-    if (!parsedItems.length) return toast('No items in order', 'error')
+    if (!customerName.trim()) return toast('Naam daalein', 'error')
+    if (!parsedItems.length)  return toast('Cart khaali hai', 'error')
 
     const total = orderTotal(parsedItems)
-    // Split payment — must sum to total (auto-distribute if all blank).
-    let cash   = parseFloat(pay.cash)   || 0
-    let upi    = parseFloat(pay.upi)    || 0
-    let udhaar = parseFloat(pay.udhaar) || 0
-    if (cash + upi + udhaar === 0) {
-      // Default = full cash.
-      cash = total
-    } else if (Math.abs(cash + upi + udhaar - total) > 0.01) {
-      return toast(`Payment split must equal ₹${total.toFixed(0)} (cash+UPI+udhaar)`, 'error')
+    // Single Paid input — derive split + status:
+    //   • paid blank or 0  → fully on udhaar, status 'pending'
+    //   • 0 < paid < total → cash = paid, udhaar = remainder, status 'pending'
+    //   • paid >= total    → cash = total, udhaar 0, status 'delivered'
+    const paidAmt = Math.max(0, parseFloat(paid) || 0)
+    if (paidAmt > total + 0.01) {
+      return toast(`Paid ₹${paidAmt.toFixed(0)} is more than total ₹${total.toFixed(0)}`, 'error')
     }
+    const cash   = paidAmt
+    const upi    = 0
+    const udhaar = Math.max(0, total - paidAmt)
+    const status = udhaar < 0.01 ? 'delivered' : 'pending'
 
     try {
       await addOrder({
         customerName:  customerName.trim(),
         customerPhone: customerPhone.trim(),
         items:         parsedItems,
-        status:        orderStatus,
+        status,
         total,
         rawMessage:    pasteMsg,
         paidCash:      cash,
         paidUpi:       upi,
         paidUdhaar:    udhaar,
       })
-      // If any portion is on udhaar, accumulate on the customer's ledger.
+      // If any udhaar remains, accumulate on the customer's ledger.
       if (udhaar > 0) {
         const cust = customers.find(c => c.phone === customerPhone.trim())
         if (cust) await addUdhaar(cust.id, udhaar)
       }
       toast('Order saved!', 'success')
-      if (sendWaReceipt && customerPhone && orderStatus === 'delivered') {
+      if (sendWaReceipt && customerPhone && status === 'delivered') {
         window.open(sendOrderConfirmation(customerPhone, customerName, parsedItems, total), '_blank')
       }
+      // Reset
       setPasteMsg(''); setCustomerName(''); setCustomerPhone(''); setParsedItems([]); setUnrecognised([])
-      setCustSearch(''); setPay({ cash: '', upi: '', udhaar: '' }); setOrderStatus('delivered')
+      setCustSearch(''); setPaid(''); setPasteOpen(false)
       setShowNew(false)
     } catch (e) { toast(e.message, 'error') }
   }
@@ -397,9 +405,15 @@ export default function Orders() {
         title="Naya Order"
         maxHeight="92vh"
       >
-        <div className="space-y-4">
-          {/* Recent customers — one-tap select for the 5 most-recent unique
-              names from the last 50 orders. Saves typing for repeat orders. */}
+        {(() => {
+          const total     = orderTotal(parsedItems)
+          const paidNum   = Math.max(0, parseFloat(paid) || 0)
+          const remaining = Math.max(0, total - paidNum)
+          const overpaid  = paidNum > total + 0.01
+
+          return (
+        <div className="space-y-3">
+          {/* ── 1. Customer ──────────────────────────────────────────── */}
           <RecentCustomerChips
             orders={orders}
             customers={customers}
@@ -412,7 +426,6 @@ export default function Orders() {
             }}
           />
 
-          {/* ── Customer picker ─────────────────────────────────────────── */}
           <CustomerPicker
             customers={customers}
             name={customerName}
@@ -436,267 +449,319 @@ export default function Orders() {
             onFocus={() => setShowCustDrop(true)}
           />
 
-          {/* Search-and-add — tap a product to add to cart one at a time.
-              The bulk paths (voice / paste / image) below populate the same
-              cart en masse. Both feed into parsedItems. */}
-          <ProductSearchAdd
-            products={products}
-            onAdd={(p) => {
-              setParsedItems(items => {
-                const existing = items.findIndex(it => it.productId === p.id)
-                if (existing >= 0) {
-                  return items.map((it, i) => i === existing ? { ...it, qty: (it.qty || 1) + 1 } : it)
-                }
-                return [...items, {
-                  productId:   p.id,
-                  productName: p.name,
-                  qty:         1,
-                  unit:        p.unit || 'pc',
-                  price:       p.price ?? 0,
-                  inStock:     p.inStock ?? true,
-                }]
-              })
-            }}
-          />
+          {/* ── 2. Compact AI input — three small buttons in one row.
+                Voice  : VoiceButton (hold to speak)
+                Photo  : ImageOrderScanner in compact mode (one-tap pick)
+                Paste  : toggle a textarea below
+              The active mode renders its UI inline below the row. */}
+          <div>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1 mb-1.5 flex items-center gap-1">
+              <Sparkles size={11} className="text-emerald-500" /> AI se add karein
+            </p>
 
-          {/* Voice input — speak the order directly */}
-          <div className="flex items-center gap-3 bg-zinc-50 rounded-2xl px-4 py-3">
-            <VoiceButton
-              onResult={handleVoiceResult}
-              onInterim={t => setVoiceInterim(t)}
-              size="sm"
-              label="Speak order"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-zinc-700">Speak the order</p>
-              {voiceInterim
-                ? <p className="text-xs text-emerald-600 italic truncate mt-0.5">{voiceInterim}…</p>
-                : <p className="text-xs text-zinc-400 mt-0.5">
-                    Hold mic · say "do Maggi, ek kg aata, teen Parle-G"
-                  </p>
-              }
+            <div className="grid grid-cols-3 gap-1.5 bg-cream-100 rounded-2xl p-1.5">
+              <CompactVoiceTile
+                onResult={handleVoiceResult}
+                onInterim={t => setVoiceInterim(t)}
+              />
+              <ImageOrderScanner
+                compact
+                onItemsReady={handleImageItems}
+                onError={msg => toast(msg, 'info')}
+              />
+              <button
+                onClick={() => setPasteOpen(o => !o)}
+                className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border ${
+                  pasteOpen
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
+                }`}
+              >
+                <ClipboardPaste size={16} />
+                <span className="text-[10px] font-bold mt-1 leading-none">Paste</span>
+              </button>
             </div>
-          </div>
 
-          {/* Image scan */}
-          <ImageOrderScanner
-            onItemsReady={handleImageItems}
-            onError={msg => toast(msg, 'info')}
-          />
+            {voiceInterim && (
+              <div className="mt-1.5 px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-700 italic">
+                {voiceInterim}…
+              </div>
+            )}
 
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-px bg-zinc-100" />
-            <span className="text-xs font-semibold text-zinc-400">or paste text</span>
-            <div className="flex-1 h-px bg-zinc-100" />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-500">Paste WhatsApp Message</label>
-            <textarea
-              className="input-field h-24 resize-none text-sm"
-              placeholder={"Parle-G 2 packet\nMaggi 3\nAmul milk 1 litre"}
-              value={pasteMsg}
-              onChange={e => { setPasteMsg(e.target.value); setParsedItems([]); setUnrecognised([]) }}
-            />
-          </div>
-
-          {/* Auto-parse status strip — replaces the manual 'Parse Order' button.
-              Parsing kicks in 800ms after the user stops typing. */}
-          {pasteMsg.trim().length >= 4 && (
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-zinc-400 px-1">
-              {aiParsing ? (
-                <>
-                  <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                  <span className="text-emerald-600">AI parsing…</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-emerald-500">✦</span>
-                  <span>Auto-parses jab tum likhna band karte ho</span>
-                  <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
-                    Parse abhi
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {parsedItems.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Parsed Items</p>
-                {/* Acknowledgement — send as soon as items are parsed */}
-                {ackLink && (
-                  <WAButton href={ackLink} label="Acknowledge receipt" />
+            {pasteOpen && (
+              <div className="mt-2 space-y-1.5">
+                <textarea
+                  className="input-field h-24 resize-none text-sm"
+                  placeholder={"Parle-G 2 packet\nMaggi 3\nAmul milk 1 litre"}
+                  value={pasteMsg}
+                  onChange={e => { setPasteMsg(e.target.value); setParsedItems([]); setUnrecognised([]) }}
+                  autoFocus
+                />
+                {pasteMsg.trim().length >= 4 && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 px-1">
+                    {aiParsing ? (
+                      <>
+                        <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                        <span className="text-emerald-600">AI parsing…</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-emerald-500">✦</span>
+                        <span>Auto-parses jab tum likhna band karte ho</span>
+                        <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
+                          Parse abhi
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
+            )}
 
-              {parsedItems.map((item, idx) => (
-                <div key={idx} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${item.inStock ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                  {/* Tap the name → open ItemSwap to replace this match */}
-                  <button
-                    onClick={() => setSwapTarget({ idx, item })}
-                    className="flex-1 min-w-0 text-left active:opacity-70"
-                    title="Tap to swap this item"
-                  >
-                    <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
-                    {item.sourceLine && (
-                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">
-                        from: "{item.sourceLine}" — tap to badlein
-                      </p>
-                    )}
-                  </button>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <div className="flex items-center gap-2">
-                      {/* −/+ stepper instead of a number input — easier on mobile */}
-                      <div className="flex items-center bg-white border border-zinc-200 rounded-lg overflow-hidden">
+            {aiParsing && !pasteOpen && (
+              <div className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-emerald-600 px-1">
+                <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                AI parsing…
+              </div>
+            )}
+          </div>
+
+          {/* ── 3. Cart — manual search at the top, items below, total at the bottom ── */}
+          <div className="card p-0 overflow-hidden">
+            <div className="px-3 pt-3 pb-2 border-b border-cream-100">
+              <ProductSearchAdd
+                products={products}
+                onAdd={(p) => {
+                  setParsedItems(items => {
+                    const existing = items.findIndex(it => it.productId === p.id)
+                    if (existing >= 0) {
+                      return items.map((it, i) => i === existing ? { ...it, qty: (it.qty || 1) + 1 } : it)
+                    }
+                    return [...items, {
+                      productId:   p.id,
+                      productName: p.name,
+                      qty:         1,
+                      unit:        p.unit || 'pc',
+                      price:       p.price ?? 0,
+                      inStock:     p.inStock ?? true,
+                    }]
+                  })
+                }}
+              />
+            </div>
+
+            {parsedItems.length === 0 && unrecognised.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs text-zinc-400 leading-relaxed">
+                Cart khaali hai.<br/>
+                Saamaan dhoondhke add karein <span className="text-zinc-300">↑</span>
+                {' '}ya AI se add karein <span className="text-zinc-300">↑</span>
+              </div>
+            ) : (
+              <>
+                {ackLink && (
+                  <div className="px-3 pt-2.5">
+                    <WAButton href={ackLink} label="Acknowledge receipt" />
+                  </div>
+                )}
+
+                <div className="divide-y divide-cream-50">
+                  {parsedItems.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 ${item.inStock ? '' : 'bg-red-50/40'}`}
+                    >
+                      <button
+                        onClick={() => setSwapTarget({ idx, item })}
+                        className="flex-1 min-w-0 text-left active:opacity-70"
+                        title="Tap to swap this item"
+                      >
+                        <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
+                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+                          ₹{item.price} / {item.unit}
+                          {item.sourceLine && <> · from: "{item.sourceLine}"</>}
+                          {!item.inStock && <span className="ml-1 text-red-500 font-bold">OOS</span>}
+                        </p>
+                      </button>
+
+                      <div className="flex items-center bg-white border border-cream-200 rounded-lg overflow-hidden flex-shrink-0">
                         <button
                           onClick={() => updateItem(idx, { qty: Math.max(1, (item.qty || 1) - 1) })}
-                          className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-50 active:bg-zinc-100"
+                          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
                           aria-label="Kam karein"
                         >
                           <Minus size={13} />
                         </button>
-                        <span className="min-w-[28px] text-center text-sm font-bold text-zinc-800 tabular-nums px-1">
+                        <span className="min-w-[24px] text-center text-sm font-bold text-zinc-800 tabular-nums">
                           {item.qty}
                         </span>
                         <button
                           onClick={() => updateItem(idx, { qty: (item.qty || 1) + 1 })}
-                          className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:bg-zinc-50 active:bg-zinc-100"
+                          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
                           aria-label="Zyada karein"
                         >
                           <Plus size={13} />
                         </button>
                       </div>
-                      <span className="text-xs text-zinc-400">{item.unit}</span>
-                      <span className="text-xs font-bold text-zinc-700">₹{(item.price * item.qty).toFixed(0)}</span>
-                      {!item.inStock && <span className="badge bg-red-100 text-red-600">OOS</span>}
+
+                      <span className="text-xs font-bold text-zinc-700 tabular-nums w-12 text-right flex-shrink-0">
+                        ₹{(item.price * item.qty).toFixed(0)}
+                      </span>
+
+                      <button
+                        onClick={() => setParsedItems(p => p.filter((_, i) => i !== idx))}
+                        className="text-zinc-300 active:text-red-400 flex-shrink-0"
+                        aria-label="Remove item"
+                      >
+                        <X size={15} />
+                      </button>
                     </div>
-                  </div>
-                  <button onClick={() => setParsedItems(p => p.filter((_, i) => i !== idx))} className="text-zinc-300 hover:text-red-400 transition-colors">
-                    <X size={15} />
-                  </button>
-                </div>
-              ))}
+                  ))}
 
-              {unrecognised.map((u, idx) => (
-                <UnrecognisedItem
-                  key={idx}
-                  item={u}
-                  onAddToCatalog={async (name, price) => {
-                    try {
-                      const product = await addProduct({
-                        name,
-                        price,
-                        unit: guessUnit(name),
-                        category: guessCategory(name),
-                        inStock: true,
-                        aliases: [],
-                      })
-                      // Move into parsed items so the user sees their order updated
-                      setParsedItems(p => [...p, {
-                        productId:   product.id,
-                        productName: product.name,
-                        qty:         u.qty || 1,
-                        unit:        product.unit,
-                        price:       product.price,
-                        inStock:     true,
-                        sourceLine:  u.originalLine,
-                      }])
-                      setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                      // Record the line→product mapping so the parser
-                      // recognises it next time without an LLM call.
-                      try {
-                        const { api } = await import('../api/client.js')
-                        api.post('/api/corrections', {
-                          rawLine:   u.originalLine,
-                          productId: product.id,
-                        }).catch(() => {})
-                      } catch {}
-                      toast(`${product.name} catalog me jud gaya`, 'success')
-                    } catch (e) { toast(e.message, 'error') }
-                  }}
-                  onAddOneOff={(name, price, qty) => {
-                    // Add as line item without persisting to catalog.
-                    setParsedItems(p => [...p, {
-                      productId:   null,
-                      productName: name,
-                      qty:         qty || 1,
-                      unit:        guessUnit(name) || 'pc',
-                      price,
-                      inStock:     true,
-                    }])
-                    setUnrecognised(curr => curr.filter((_, i) => i !== idx))
-                  }}
-                  onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
-                />
-              ))}
-
-              <div className="flex justify-between items-center bg-zinc-50 rounded-xl px-4 py-3">
-                <span className="text-sm font-semibold text-zinc-600">Total</span>
-                <span className="text-lg font-bold text-zinc-900">₹{orderTotal(parsedItems).toFixed(0)}</span>
-              </div>
-
-              {/* OOS notice */}
-              {oosLink && (
-                <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 hover:!bg-red-100" />
-              )}
-
-              {/* Sticky save row — split payment + decoupled status. */}
-              <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-zinc-100 space-y-2">
-                {/* Live total + WA toggle */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-zinc-900 text-base tabular-nums">
-                    Total: ₹{orderTotal(parsedItems).toFixed(0)}
-                  </span>
-                  {customerPhone && (
-                    <label className="flex items-center gap-1.5 text-zinc-500 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={sendWaReceipt}
-                        onChange={e => setSendWaReceipt(e.target.checked)}
-                        className="rounded"
+                  {unrecognised.map((u, idx) => (
+                    <div key={idx} className="px-3 py-2.5">
+                      <UnrecognisedItem
+                        item={u}
+                        onAddToCatalog={async (name, price) => {
+                          try {
+                            const product = await addProduct({
+                              name,
+                              price: Number(price) || 0,
+                              unit:  guessUnit(name) || 'pc',
+                              category: guessCategory(name) || 'Other',
+                              inStock: true,
+                            })
+                            setParsedItems(p => [...p, {
+                              productId:   product.id,
+                              productName: product.name,
+                              qty:         u.qty || 1,
+                              unit:        product.unit,
+                              price:       product.price,
+                              inStock:     true,
+                              sourceLine:  u.originalLine,
+                            }])
+                            setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                            try {
+                              const { api } = await import('../api/client.js')
+                              api.post('/api/corrections', {
+                                rawLine:   u.originalLine,
+                                productId: product.id,
+                              }).catch(() => {})
+                            } catch {}
+                            toast(`${product.name} catalog me jud gaya`, 'success')
+                          } catch (e) { toast(e.message, 'error') }
+                        }}
+                        onAddOneOff={(name, price, qty) => {
+                          setParsedItems(p => [...p, {
+                            productId:   null,
+                            productName: name,
+                            qty:         qty || 1,
+                            unit:        guessUnit(name) || 'pc',
+                            price,
+                            inStock:     true,
+                          }])
+                          setUnrecognised(curr => curr.filter((_, i) => i !== idx))
+                        }}
+                        onSkip={() => setUnrecognised(curr => curr.filter((_, i) => i !== idx))}
                       />
-                      WhatsApp receipt
-                    </label>
-                  )}
-                </div>
-
-                {/* Payment split — must sum to total. Empty = full cash. */}
-                <div className="grid grid-cols-3 gap-2">
-                  <PayInput label="Cash"   value={pay.cash}   onChange={v => setPay(p => ({ ...p, cash: v }))} />
-                  <PayInput label="UPI"    value={pay.upi}    onChange={v => setPay(p => ({ ...p, upi: v }))} />
-                  <PayInput label="Udhaar" value={pay.udhaar} onChange={v => setPay(p => ({ ...p, udhaar: v }))} accent="orange" />
-                </div>
-
-                {/* Status pill — workflow only, decoupled from payment */}
-                <div className="flex gap-1.5 text-xs">
-                  {[
-                    { id: 'delivered', label: 'De diya', activeBg: 'bg-emerald-500' },
-                    { id: 'pending',   label: 'Bakaya',  activeBg: 'bg-amber-500'   },
-                    { id: 'cancelled', label: 'Cancel',  activeBg: 'bg-zinc-500'    },
-                  ].map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => setOrderStatus(s.id)}
-                      className={`flex-1 py-1.5 rounded-lg font-bold transition-colors ${
-                        orderStatus === s.id
-                          ? `${s.activeBg} text-white`
-                          : 'bg-zinc-100 text-zinc-500'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
+                    </div>
                   ))}
                 </div>
 
-                <button onClick={confirmOrder} className="btn-primary py-3 text-sm flex items-center justify-center gap-1.5">
-                  <Check size={15} /> Save Order
-                </button>
+                {parsedItems.length > 0 && (
+                  <div className="px-4 py-2.5 bg-cream-50 border-t border-cream-100 flex justify-between items-center">
+                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Total</span>
+                    <span className="text-lg font-extrabold text-zinc-900 tabular-nums">₹{total.toFixed(0)}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {oosLink && (
+            <WAButton href={oosLink} label="Notify customer about OOS items" block size="md" className="border border-red-100 !text-red-600 !bg-red-50 active:!bg-red-100" />
+          )}
+
+          {/* ── 4. Payment — Single "Paid" field, auto-derived Bakaya ── */}
+          {parsedItems.length > 0 && (
+            <div className="card space-y-2.5">
+              <div>
+                <label className="field-label">Paisa diya</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">₹</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    className="input-field pl-8 pr-20 text-base font-bold tabular-nums"
+                    placeholder={total.toFixed(0)}
+                    value={paid}
+                    onChange={e => setPaid(e.target.value)}
+                  />
+                  <button
+                    onClick={() => setPaid(total.toFixed(0))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-extrabold px-2 py-1 rounded-md active:bg-emerald-50"
+                  >
+                    PURA
+                  </button>
+                </div>
               </div>
+
+              <div className={`flex items-center justify-between text-sm rounded-xl px-3 py-2 ${
+                overpaid
+                  ? 'bg-red-50 border border-red-100'
+                  : remaining > 0
+                    ? 'bg-amber-50/60'
+                    : 'bg-emerald-50/60'
+              }`}>
+                <span className="font-semibold text-zinc-600">
+                  {overpaid ? 'Zyada paise diye' : remaining > 0 ? 'Bakaya (udhaar pe jaayega)' : 'Pura paid hua'}
+                </span>
+                <span className={`font-extrabold tabular-nums ${
+                  overpaid
+                    ? 'text-red-600'
+                    : remaining > 0
+                      ? 'text-amber-600'
+                      : 'text-emerald-600'
+                }`}>
+                  {overpaid
+                    ? `−₹${(paidNum - total).toFixed(0)}`
+                    : `₹${remaining.toFixed(0)}`}
+                </span>
+              </div>
+
+              {customerPhone && (
+                <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none px-1 pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={sendWaReceipt}
+                    onChange={e => setSendWaReceipt(e.target.checked)}
+                    className="rounded"
+                  />
+                  WhatsApp receipt bhejo (+91 {customerPhone})
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* ── 5. Sticky save ─────────────────────────────────────────── */}
+          {parsedItems.length > 0 && (
+            <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100">
+              <button
+                onClick={confirmOrder}
+                disabled={overpaid}
+                className="btn-primary py-3.5 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Check size={16} />
+                Save Order — ₹{total.toFixed(0)}
+                {remaining > 0 && !overpaid && (
+                  <span className="text-amber-100 font-bold ml-0.5">· ₹{remaining.toFixed(0)} udhaar</span>
+                )}
+              </button>
             </div>
           )}
         </div>
+          )
+        })()}
       </BottomSheet>
 
       {/* Tap-to-swap drawer — replaces an AI-matched cart item with a
@@ -1042,21 +1107,71 @@ function SumCard({ icon, label, value, sub, color }) {
 // Compact ₹ input cell for the payment split row at the bottom of Naya
 // Order. Empty = no contribution; the save handler defaults to "all cash"
 // when every cell is blank.
-function PayInput({ label, value, onChange, accent = 'zinc' }) {
-  const ring = accent === 'orange' ? 'focus:ring-orange-300' : 'focus:ring-emerald-300'
-  return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">{label}</span>
-      <div className="flex items-center bg-white border border-zinc-200 rounded-lg overflow-hidden">
-        <span className="px-2 text-xs text-zinc-400">₹</span>
-        <input
-          type="number" inputMode="numeric" placeholder="0"
-          className={`w-full py-1.5 pr-1 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 ${ring}`}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-        />
+// CompactVoiceTile — fits in the 3-column AI input grid alongside the photo
+// and paste tiles. Same hold-to-record UX as VoiceButton, just shaped like
+// a tile. Returns null if the browser doesn't support speech recognition,
+// which keeps the grid layout sensible for desktop Chrome / Safari fallback.
+function CompactVoiceTile({ onResult, onInterim }) {
+  const [listening, setListening] = useState(false)
+  const recRef = useRef(null)
+
+  if (!isSpeechSupported()) {
+    return (
+      <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-zinc-50 text-zinc-300 border border-cream-200 cursor-not-allowed">
+        <X size={16} />
+        <span className="text-[10px] font-bold mt-1 leading-none">Voice ✕</span>
       </div>
-    </label>
+    )
+  }
+
+  function start() {
+    const rec = createRecognition()
+    if (!rec) return
+    recRef.current = rec
+    rec.onstart = () => setListening(true)
+    rec.onend   = () => { setListening(false); onInterim?.('') }
+    rec.onerror = () => { setListening(false); onInterim?.('') }
+    rec.onresult = (e) => {
+      const results = Array.from(e.results)
+      const interimText = results.map(r => r[0].transcript).join(' ')
+      onInterim?.(interimText)
+      const final = results.find(r => r.isFinal)
+      if (final) {
+        onResult?.(final[0].transcript.trim())
+        onInterim?.('')
+      }
+    }
+    rec.start()
+  }
+  function stop() {
+    recRef.current?.stop()
+    setListening(false)
+    onInterim?.('')
+  }
+
+  return (
+    <button
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      title={listening ? 'Sun raha hoon…' : 'Hold to speak'}
+      className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border select-none ${
+        listening
+          ? 'bg-red-500 text-white border-red-500 voice-active'
+          : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
+      }`}
+    >
+      {/* Inline mic glyph — keeps the import small. */}
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+        <path d="M19 10a7 7 0 0 1-14 0" />
+        <line x1="12" y1="17" x2="12" y2="22" />
+        <line x1="8"  y1="22" x2="16" y2="22" />
+      </svg>
+      <span className="text-[10px] font-bold mt-1 leading-none">
+        {listening ? 'Sun raha…' : 'Speak'}
+      </span>
+    </button>
   )
 }
 
