@@ -20,6 +20,38 @@ const { Client, LocalAuth } = pkg
 import qrcode from 'qrcode'
 import supabase from '../db.js'
 
+// ── phone normalisation ───────────────────────────────────────────────────────
+// WhatsApp's contact.number / msg.from gives us digits in inconsistent forms:
+//   • "919876543210"  — international with 91 country code (most common)
+//   • "9876543210"    — already a 10-digit local number
+//   • "09876543210"   — 0 prefix from trunk-dialing carriers (rare)
+//   • "447712345678"  — non-Indian (e.g. UK) international number
+//   • "77459835900054" — garbage from WA Business accounts / serialised IDs
+//
+// Goal: produce either a valid mobile number string or empty.
+//   1. 12 digits with 91 prefix → strip → 10 digits
+//   2. 11 digits with 0  prefix → strip → 10 digits
+//   3. 10 digits starting 6/7/8/9 (Indian mobile) → keep
+//   4. 10–12 digits otherwise (foreign international) → keep
+//   5. Anything else (incl. the 14-digit garbage above) → empty
+//
+// Allowing 10–12 covers ~all non-Indian carriers without admitting weird
+// serialised-ID payloads that are 13+ digits.
+export function normalisePhone(raw) {
+  if (!raw) return ''
+  const digits = String(raw).replace(/\D/g, '')
+  if (!digits) return ''
+  // Strip Indian country code
+  let p = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits
+  // Strip trunk-dialing 0
+  if (p.length === 11 && p.startsWith('0')) p = p.slice(1)
+  // Indian mobile: 10 digits, starts 6-9 — most common case
+  if (/^[6-9]\d{9}$/.test(p)) return p
+  // Allow 10–12 digit international numbers as-is. Anything else dropped.
+  if (/^\d{10,12}$/.test(p)) return p
+  return ''
+}
+
 // ── state ─────────────────────────────────────────────────────────────────────
 let _client       = null
 let _qrRaw        = null   // raw QR string (for conversion to data-URL on demand)
@@ -131,31 +163,34 @@ export function initWhatsApp(shopId) {
     // LID like "117048@lid" as a "phone" — that breaks customer dedup,
     // breaks udhaar lookups, and shows up as garbage in the UI.
     let fromName  = ''
-    let fromPhone = ''
+    let rawPhone  = ''
     try {
       const contact = await msg.getContact()
       fromName = contact?.pushname || contact?.name || contact?.shortName || ''
       // contact.number is e.g. "919876543210" (international, no +)
       if (contact?.number) {
-        fromPhone = String(contact.number).replace(/\D/g, '')
+        rawPhone = String(contact.number).replace(/\D/g, '')
       }
     } catch { /* non-fatal */ }
 
     // Fallback: msg.from for classic @c.us only. Skip @lid here on purpose.
-    if (!fromPhone && msg.from?.endsWith('@c.us')) {
+    if (!rawPhone && msg.from?.endsWith('@c.us')) {
       const idPart = msg.from.replace('@c.us', '')
-      if (/^\d+$/.test(idPart)) fromPhone = idPart
+      if (/^\d+$/.test(idPart)) rawPhone = idPart
     }
 
-    // Strip leading country code 91 → 10-digit Indian number when it fits.
-    if (fromPhone.length > 10 && fromPhone.startsWith('91')) {
-      fromPhone = fromPhone.slice(2)
-    }
+    // Normalise to a clean Indian (or sensible international) mobile number.
+    // Reject anything that looks like garbage rather than storing it — the
+    // shopkeeper can backfill the real number from Khaata when they want.
+    //
+    // Caller saw "77459835900054" (14 digits) get persisted because the old
+    // /^\d{8,15}$/ check was too permissive. WhatsApp Business or odd
+    // serialised IDs occasionally leak digits beyond the actual phone.
+    const fromPhone = normalisePhone(rawPhone)
 
-    // Final guard: only persist a phone if it's purely digits and looks
-    // like a plausible 10-15 digit number. Otherwise empty string — the
-    // shopkeeper can backfill from Khaata once they see the message.
-    if (!/^\d{8,15}$/.test(fromPhone)) fromPhone = ''
+    if (rawPhone && !fromPhone) {
+      console.warn(`[WA] dropping unparseable phone "${rawPhone}" from ${msg.from}`)
+    }
 
     if (!fromName) fromName = fromPhone || 'Unknown'
 
