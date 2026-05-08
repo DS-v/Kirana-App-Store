@@ -38,7 +38,7 @@ export default function Auth({ onAuth }) {
       if (session) { setSession(session); setStep('setup') }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (s && step !== 'setup') { setSession(s); setStep('setup') }
+      if (s && step !== 'setup') { setSession(s); setStep('setup'); setBusy(false) }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -49,7 +49,10 @@ export default function Auth({ onAuth }) {
       provider: 'google',
       options: { redirectTo: window.location.origin },
     })
-    if (error) { toast(error.message, 'error'); setBusy(false) }
+    // Always reset busy — if the redirect doesn't happen (error, bfcache, popup
+    // blocker, etc.) the button would be permanently frozen otherwise.
+    if (error) toast(error.message, 'error')
+    setBusy(false)
   }
 
   async function sendOtp() {
