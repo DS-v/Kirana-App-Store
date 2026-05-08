@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { api, normaliseProduct, normaliseCustomer } from '../api/client.js'
 
+// Guard flag — prevents the logout→signOut→SIGNED_OUT→logout recursive loop.
+let _logoutInFlight = false
+
 // ── local cache helpers ───────────────────────────────────────────────────────
 const cache = {
   get: (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) ?? fb } catch { return fb } },
@@ -78,15 +81,18 @@ const useStore = create((set, get) => ({
   },
 
   logout: async () => {
-    // Sign out from Supabase FIRST and await it. If we cleared local state first,
-    // Auth would mount, see the still-live Supabase session, and jump to the
-    // shop-name setup step before signOut completed.
+    // Re-entry guard: supabase.auth.signOut() fires a SIGNED_OUT event which
+    // triggers onAuthStateChange → logout() again. Without this flag that
+    // creates an infinite loop that freezes the login page.
+    if (_logoutInFlight) return
+    _logoutInFlight = true
     try {
       const { default: supabase } = await import('../lib/supabase.js')
       await supabase.auth.signOut()
     } catch {}
     ['kirana_token','kirana_shop_id','kirana_shop_name','kirana_phone','kirana_upi'].forEach(k => localStorage.removeItem(k))
     set({ token: null, shopId: null, shopName: '', ownerPhone: '', upiId: '' })
+    _logoutInFlight = false
   },
 
   // ── loading / error ────────────────────────────────────────────────────────

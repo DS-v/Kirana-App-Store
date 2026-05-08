@@ -158,10 +158,12 @@ export default function App() {
       setBooting(false)
     })
 
-    // Keep token fresh when Supabase refreshes it
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) logout()
-      else {
+    // Keep token fresh when Supabase refreshes it.
+    // Skip INITIAL_SESSION with null — that just means the user isn't logged in yet;
+    // calling logout() there triggers signOut() → SIGNED_OUT loop that freezes the page.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session && event !== 'INITIAL_SESSION') logout()
+      else if (session) {
         const stored = localStorage.getItem('kirana_shop_name')
         if (stored) {
           setAuth({ token: session.access_token, shopId: session.user.id, shopName: stored, phone: session.user.phone || '' })
