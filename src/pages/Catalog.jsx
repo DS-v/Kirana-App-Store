@@ -202,13 +202,13 @@ export default function Catalog() {
     <div className="pb-32 min-h-full animate-fade-in">
 
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
+      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-ink-100/80"
            style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
         <div className="px-4 py-3.5 max-w-lg mx-auto">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Saamaan</h1>
-              <p className="text-[11px] font-bold text-zinc-400 mt-0.5">
+              <h1 className="text-xl font-extrabold text-ink-700 tracking-tight">Saamaan</h1>
+              <p className="text-[11px] font-bold text-ink-400 mt-0.5">
                 {inStockCount} stock me · {oosCount > 0 && <span className="text-red-500">{oosCount} khatam</span>}
               </p>
             </div>
@@ -217,14 +217,14 @@ export default function Catalog() {
               <CompactVoiceButton onResult={handleVoiceResult} />
               <button
                 onClick={() => setShowPaste(!showPaste)}
-                className="text-xs bg-white border border-zinc-200 text-zinc-600 px-3 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
+                className="text-xs bg-white border border-cream-200 text-ink-600 px-3 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
                 style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
               >
                 Paste
               </button>
               <button
                 onClick={() => setShowImport(true)}
-                className="flex items-center gap-1 text-xs bg-white border border-zinc-200 text-zinc-600 px-2.5 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
+                className="flex items-center gap-1 text-xs bg-white border border-cream-200 text-ink-600 px-2.5 py-2 rounded-xl font-semibold active:scale-95 transition-transform"
                 style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
               >
                 <Upload size={13} /> Import
@@ -246,12 +246,12 @@ export default function Catalog() {
         {showPaste && (
           <div className="card-elevated space-y-3 animate-slide-up">
             <div className="flex items-center justify-between">
-              <p className="font-bold text-zinc-900 text-sm">WhatsApp / list paste karein</p>
-              <button onClick={() => setShowPaste(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100">
+              <p className="font-bold text-ink-700 text-sm">WhatsApp / list paste karein</p>
+              <button onClick={() => setShowPaste(false)} className="w-7 h-7 flex items-center justify-center rounded-xl text-ink-400 hover:bg-cream-100">
                 <X size={15} />
               </button>
             </div>
-            <p className="text-[11px] text-zinc-400 leading-relaxed">
+            <p className="text-[11px] text-ink-400 leading-relaxed">
               Ek line per item · "Parle-G 10" · "Amul Milk 500ml 28" · "Surf Excel 200g @ ₹45"
             </p>
             <textarea
@@ -263,24 +263,24 @@ export default function Catalog() {
             {(pastePreview.length > 0 || pasteSource === 'ai-loading') && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase">
+                  <p className="text-[10px] font-bold text-ink-400 uppercase">
                     Preview ({pastePreview.length} items)
                   </p>
                   <PasteSourceBadge source={pasteSource} />
                 </div>
-                <div className="bg-zinc-50 rounded-xl p-2 max-h-40 overflow-y-auto no-scrollbar space-y-1">
+                <div className="bg-cream-50 rounded-xl p-2 max-h-40 overflow-y-auto no-scrollbar space-y-1">
                   {pastePreview.slice(0, 8).map((r, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs px-2 py-1.5 bg-white rounded-lg">
-                      <span className="font-semibold text-zinc-800 truncate">{r.name}</span>
-                      <span className="flex gap-2 items-center text-zinc-500 flex-shrink-0">
+                    <div key={i} className="flex items-center justify-between text-xs px-2 py-1.5 bg-white rounded-xl">
+                      <span className="font-semibold text-ink-700 truncate">{r.name}</span>
+                      <span className="flex gap-2 items-center text-ink-400 flex-shrink-0">
                         <span className="text-[10px] uppercase">{r.category}</span>
-                        <span className="text-[10px] text-zinc-400">{r.unit}</span>
-                        <span className="font-bold text-zinc-900">₹{r.price}</span>
+                        <span className="text-[10px] text-ink-400">{r.unit}</span>
+                        <span className="font-bold text-ink-700">₹{r.price}</span>
                       </span>
                     </div>
                   ))}
                   {pastePreview.length > 8 && (
-                    <p className="text-[10px] text-zinc-400 text-center pt-1">+{pastePreview.length - 8} aur</p>
+                    <p className="text-[10px] text-ink-400 text-center pt-1">+{pastePreview.length - 8} aur</p>
                   )}
                 </div>
               </div>
@@ -304,19 +304,19 @@ export default function Catalog() {
         >
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-500">Naam *</label>
+              <label className="text-xs font-semibold text-ink-400">Naam *</label>
               <input className="input-field" placeholder="e.g. Parle-G" value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))} autoFocus />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-500">Price (₹) *</label>
+                <label className="text-xs font-semibold text-ink-400">Price (₹) *</label>
                 <input className="input-field" type="number" inputMode="numeric" placeholder="0"
                   value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-500">Unit</label>
+                <label className="text-xs font-semibold text-ink-400">Unit</label>
                 <select className="input-field" value={form.unit}
                   onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
                   {UNITS.map(u => <option key={u}>{u}</option>)}
@@ -325,12 +325,12 @@ export default function Catalog() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-zinc-500">Category</label>
+              <label className="text-xs font-semibold text-ink-400">Category</label>
               <div className="flex flex-wrap gap-1.5">
                 {CAT_LIST.map(cat => (
                   <button key={cat} onClick={() => setForm(f => ({ ...f, category: cat }))}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      form.category === cat ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-600'
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                      form.category === cat ? 'bg-kirana-500 text-white' : 'bg-cream-100 text-ink-600'
                     }`}>
                     {cat}
                   </button>
@@ -340,9 +340,9 @@ export default function Catalog() {
 
             <button onClick={() => setForm(f => ({ ...f, inStock: !f.inStock }))}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                form.inStock ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+                form.inStock ? 'bg-kirana-50 text-kirana-700' : 'bg-red-50 text-red-600'
               }`}>
-              <span className={`w-3 h-3 rounded-full ${form.inStock ? 'bg-emerald-500' : 'bg-red-400'}`} />
+              <span className={`w-3 h-3 rounded-full ${form.inStock ? 'bg-kirana-500' : 'bg-red-400'}`} />
               {form.inStock ? 'Stock me' : 'Khatam'}
             </button>
 
@@ -375,7 +375,7 @@ export default function Catalog() {
 
         {/* Search */}
         <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input className="input-field pl-10 text-sm" placeholder="Saamaan dhoondein…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
@@ -410,10 +410,10 @@ export default function Catalog() {
         {filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">
-              <Package size={28} strokeWidth={1.4} className="text-zinc-300" />
+              <Package size={28} strokeWidth={1.4} className="text-ink-300" />
             </div>
-            <p className="text-sm font-semibold text-zinc-400">Koi saamaan nahi mila</p>
-            <p className="text-xs text-zinc-300">Filter hatao ya naya add karein</p>
+            <p className="text-sm font-semibold text-ink-400">Koi saamaan nahi mila</p>
+            <p className="text-xs text-ink-300">Filter hatao ya naya add karein</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2.5">
@@ -444,16 +444,16 @@ function CompactVoiceButton({ onResult }) {
 function PasteSourceBadge({ source }) {
   if (source === 'ai-loading') {
     return (
-      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
-        <span className="w-2.5 h-2.5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+      <span className="flex items-center gap-1 text-[10px] font-bold text-kirana-600">
+        <span className="w-2.5 h-2.5 rounded-full border-2 border-kirana-500 border-t-transparent animate-spin" />
         AI parsing…
       </span>
     )
   }
   if (source === 'ai') {
-    return <span className="text-[10px] font-bold text-emerald-600">✦ AI parsed</span>
+    return <span className="text-[10px] font-bold text-kirana-600">✦ AI parsed</span>
   }
-  return <span className="text-[10px] font-bold text-zinc-400">Quick parsed</span>
+  return <span className="text-[10px] font-bold text-ink-400">Quick parsed</span>
 }
 
 // ── Minimal product tile ─────────────────────────────────────────────────────
@@ -484,17 +484,17 @@ function ProductTile({ product, onEdit, onDelete, onToggle }) {
       {/* Kebab menu — always visible, the obvious way to delete */}
       <button
         onClick={(e) => { e.stopPropagation(); setShowMenu(s => !s) }}
-        className="absolute top-1 right-1 w-7 h-7 flex items-center justify-center rounded-lg text-zinc-300 hover:text-zinc-600 hover:bg-zinc-50 transition-colors"
+        className="absolute top-1 right-1 w-7 h-7 flex items-center justify-center rounded-xl text-ink-300 hover:text-ink-600 hover:bg-cream-50 transition-colors"
         title="Edit / Delete"
       >
         <MoreVertical size={15} />
       </button>
 
       <div className="cursor-pointer pr-6" onClick={onEdit}>
-        <p className="font-bold text-zinc-900 text-[13px] leading-snug line-clamp-2">{product.name}</p>
-        <p className="text-base font-extrabold text-zinc-900 tabular-nums mt-1">
+        <p className="font-bold text-ink-700 text-[13px] leading-snug line-clamp-2">{product.name}</p>
+        <p className="text-base font-extrabold text-ink-700 tabular-nums mt-1">
           ₹{product.price}
-          <span className="text-[10px] text-zinc-400 font-medium ml-1">/ {product.unit}</span>
+          <span className="text-[10px] text-ink-400 font-medium ml-1">/ {product.unit}</span>
         </p>
       </div>
 
@@ -503,11 +503,11 @@ function ProductTile({ product, onEdit, onDelete, onToggle }) {
         onClick={(e) => { e.stopPropagation(); onToggle() }}
         className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-colors ${
           product.inStock
-            ? 'bg-emerald-50 text-emerald-700 active:bg-emerald-100'
+            ? 'bg-kirana-50 text-kirana-700 active:bg-kirana-100'
             : 'bg-red-50 text-red-600 active:bg-red-100'
         }`}
       >
-        <span className={`w-2 h-2 rounded-full ${product.inStock ? 'bg-emerald-500' : 'bg-red-400'}`} />
+        <span className={`w-2 h-2 rounded-full ${product.inStock ? 'bg-kirana-500' : 'bg-red-400'}`} />
         {product.inStock ? 'Stock me' : 'Khatam'}
       </button>
 
@@ -519,7 +519,7 @@ function ProductTile({ product, onEdit, onDelete, onToggle }) {
                style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08)' }}>
             <button
               onClick={() => { setShowMenu(false); onEdit() }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ink-600 hover:bg-cream-50"
             >
               <Edit2 size={13} /> Edit
             </button>

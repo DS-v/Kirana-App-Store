@@ -92,13 +92,13 @@ export default function ItemSwap({
     <BottomSheet open={open} onClose={onClose} title="Saamaan badlein" maxHeight="80vh">
       <div className="space-y-3">
         {originalLine && (
-          <div className="text-[11px] text-zinc-400 px-1">
+          <div className="text-[11px] text-ink-400 px-1">
             <span className="font-bold">Original:</span> "{originalLine}"
           </div>
         )}
 
         <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             className="input-field pl-10 text-sm"
             placeholder="Search saamaan…"
@@ -109,7 +109,7 @@ export default function ItemSwap({
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-400"
             >
               <X size={14} />
             </button>
@@ -118,7 +118,7 @@ export default function ItemSwap({
 
         {candidates.length > 0 && (
           <div className="space-y-1">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase px-1">
+            <p className="text-[10px] font-bold text-ink-400 uppercase px-1">
               Matches
             </p>
             <div className="space-y-1 max-h-72 overflow-y-auto no-scrollbar -mx-1 px-1">
@@ -131,20 +131,20 @@ export default function ItemSwap({
                     disabled={isCurrent}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
                       isCurrent
-                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                        : 'bg-white border border-zinc-100 active:bg-zinc-50'
+                        ? 'bg-kirana-50 text-kirana-700 ring-1 ring-kirana-200'
+                        : 'bg-white border border-ink-100 active:bg-cream-50'
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-zinc-900 truncate">{p.name}</p>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                      <p className="text-sm font-semibold text-ink-700 truncate">{p.name}</p>
+                      <p className="text-[11px] text-ink-400 mt-0.5">
                         {p.category} · ₹{p.price} / {p.unit}
                         {!p.inStock && <span className="ml-2 text-red-500 font-bold">Khatam</span>}
                       </p>
                     </div>
                     {isCurrent
-                      ? <span className="text-[10px] font-bold text-emerald-700">Abhi yahi hai</span>
-                      : <ArrowLeftRight size={14} className="text-zinc-300" />}
+                      ? <span className="text-[10px] font-bold text-kirana-700">Abhi yahi hai</span>
+                      : <ArrowLeftRight size={14} className="text-ink-300" />}
                   </button>
                 )
               })}
@@ -153,8 +153,8 @@ export default function ItemSwap({
         )}
 
         {/* One-off escape hatch — for items that aren't in catalog AND won't be added permanently */}
-        <div className="border-t border-zinc-100 pt-3 space-y-2">
-          <p className="text-[10px] font-bold text-zinc-500 uppercase px-1">
+        <div className="border-t border-ink-100 pt-3 space-y-2">
+          <p className="text-[10px] font-bold text-ink-400 uppercase px-1">
             Sirf is order ke liye
           </p>
           <div className="grid grid-cols-[1fr_70px_60px] gap-2">
@@ -182,7 +182,7 @@ export default function ItemSwap({
           <button
             onClick={handleOneOff}
             disabled={!query.trim() || !(parseFloat(oneOffPrice) > 0)}
-            className="w-full py-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+            className="w-full py-2.5 bg-kirana-50 text-kirana-700 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
           >
             One-off ke roop me daalein
           </button>

@@ -502,17 +502,17 @@ export default function Orders() {
     <div className="pb-32 min-h-full animate-fade-in">
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-zinc-100/80"
+      <div className="sticky top-0 z-20 bg-[#f5f5f0]/95 backdrop-blur-md border-b border-ink-100/80"
            style={{ boxShadow: '0 1px 0 rgba(0,0,0,0.04)' }}>
         <div className="px-4 py-3.5 flex items-center justify-between max-w-lg mx-auto">
-          <h1 className="text-xl font-extrabold text-zinc-900 tracking-tight">Order Book</h1>
+          <h1 className="text-xl font-extrabold text-ink-700 tracking-tight">Order Book</h1>
           <div className="flex items-center gap-2">
             {/* List / Summary toggle */}
-            <div className="flex items-center bg-zinc-100 rounded-xl p-1 gap-0.5">
+            <div className="flex items-center bg-cream-100 rounded-xl p-1 gap-0.5">
               <button
                 onClick={() => setView('list')}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 ${
-                  view === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400'
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors duration-150 ${
+                  view === 'list' ? 'bg-white text-ink-700 shadow-sm' : 'text-ink-400'
                 }`}
                 style={{ minHeight: 36 }}
               >
@@ -520,8 +520,8 @@ export default function Orders() {
               </button>
               <button
                 onClick={() => setView('summary')}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 ${
-                  view === 'summary' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400'
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors duration-150 ${
+                  view === 'summary' ? 'bg-white text-ink-700 shadow-sm' : 'text-ink-400'
                 }`}
                 style={{ minHeight: 36 }}
               >
@@ -566,10 +566,10 @@ export default function Orders() {
             <div className="card space-y-2">
               <div className="flex items-center justify-between">
                 <p className="section-label">{PERIOD_LABEL[period]} ka Hisaab</p>
-                <span className="text-[10px] text-zinc-400 font-semibold">share-ready</span>
+                <span className="text-[10px] text-ink-400 font-semibold">share-ready</span>
               </div>
-              <pre className="text-xs text-zinc-700 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
-              <p className="text-[10px] text-zinc-400 px-1">
+              <pre className="text-xs text-ink-600 whitespace-pre-wrap font-mono leading-relaxed bg-cream-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
+              <p className="text-[10px] text-ink-400 px-1">
                 Bakaya customers aur khatam saamaan ki list Profile tab pe milegi.
               </p>
             </div>
@@ -593,8 +593,8 @@ export default function Orders() {
 
           {sumTotal === 0 && (
             <div className="empty-state">
-              <div className="empty-state-icon"><BarChart2 size={28} className="text-zinc-300" /></div>
-              <p className="text-sm font-semibold text-zinc-400">{PERIOD_LABEL[period]} koi order nahi</p>
+              <div className="empty-state-icon"><BarChart2 size={28} className="text-ink-300" /></div>
+              <p className="text-sm font-semibold text-ink-400">{PERIOD_LABEL[period]} koi order nahi</p>
             </div>
           )}
         </div>
@@ -634,7 +634,7 @@ export default function Orders() {
               clickable
               onClick={() => setStep('items')}
             />
-            <div className={`flex-1 h-px transition-colors ${step === 'review' ? 'bg-emerald-300' : 'bg-cream-200'}`} />
+            <div className={`flex-1 h-px transition-colors ${step === 'review' ? 'bg-kirana-300' : 'bg-cream-200'}`} />
             <StepDot
               num="2" label="Customer"
               active={step === 'review'}
@@ -669,10 +669,10 @@ export default function Orders() {
                 </div>
 
                 {parsedItems.length === 0 && unrecognised.length === 0 ? (
-                  <div className="px-4 py-7 text-center text-xs text-zinc-400 leading-relaxed">
+                  <div className="px-4 py-7 text-center text-xs text-ink-400 leading-relaxed">
                     Cart khaali hai.<br/>
-                    Saamaan dhoondhke add karein <span className="text-zinc-300">↑</span>{' '}
-                    ya niche AI button se add karein <span className="text-zinc-300">↓</span>
+                    Saamaan dhoondhke add karein <span className="text-ink-300">↑</span>{' '}
+                    ya niche AI button se add karein <span className="text-ink-300">↓</span>
                   </div>
                 ) : (
                   <>
@@ -706,8 +706,8 @@ export default function Orders() {
 
                     {parsedItems.length > 0 && (
                       <div className="px-4 py-2.5 bg-cream-50 border-t border-cream-100 flex justify-between items-center">
-                        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{itemCount} item · Total</span>
-                        <span className="text-lg font-extrabold text-zinc-900 tabular-nums">₹{total.toFixed(0)}</span>
+                        <span className="text-xs font-semibold text-ink-400 uppercase tracking-wider">{itemCount} item · Total</span>
+                        <span className="text-lg font-extrabold text-ink-700 tabular-nums">₹{total.toFixed(0)}</span>
                       </div>
                     )}
                   </>
@@ -717,18 +717,18 @@ export default function Orders() {
               {/* ── AI entry button — opens dedicated AI screen ─────── */}
               <button
                 onClick={() => openAIFlow('voice')}
-                className="card w-full text-left flex items-center gap-3 active:bg-cream-50 transition-colors border-2 border-dashed border-emerald-200"
+                className="card w-full text-left flex items-center gap-3 active:bg-cream-50 transition-colors border-2 border-dashed border-kirana-200"
               >
-                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <Sparkles size={18} className="text-emerald-600" />
+                <div className="w-10 h-10 rounded-2xl bg-kirana-100 flex items-center justify-center flex-shrink-0">
+                  <Sparkles size={18} className="text-kirana-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-extrabold text-zinc-900">AI se ek-saath add karein</p>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                  <p className="text-sm font-extrabold text-ink-700">AI se ek-saath add karein</p>
+                  <p className="text-[11px] text-ink-400 mt-0.5">
                     Bolo · photo lo · ya WhatsApp text paste karein
                   </p>
                 </div>
-                <ChevronRight size={16} className="text-zinc-300 flex-shrink-0" />
+                <ChevronRight size={16} className="text-ink-300 flex-shrink-0" />
               </button>
 
               {oosLink && (
@@ -760,11 +760,11 @@ export default function Orders() {
               <div className="flex items-center gap-2 -mt-1">
                 <button
                   onClick={cancelAIFlow}
-                  className="text-xs font-bold text-zinc-500 active:text-zinc-700 flex items-center gap-1 px-2 py-1 -ml-2 rounded-lg active:bg-cream-50"
+                  className="text-xs font-bold text-ink-400 active:text-ink-600 flex items-center gap-1 px-2 py-1 -ml-2 rounded-xl active:bg-cream-50"
                 >
                   ← Cart pe waapas
                 </button>
-                <p className="text-xs font-bold text-emerald-600 ml-auto flex items-center gap-1">
+                <p className="text-xs font-bold text-kirana-600 ml-auto flex items-center gap-1">
                   <Sparkles size={11} /> AI se Add karein
                 </p>
               </div>
@@ -781,8 +781,8 @@ export default function Orders() {
                     onClick={() => setAiMode(m.id)}
                     className={`py-2 rounded-xl text-xs font-extrabold transition-colors ${
                       aiMode === m.id
-                        ? 'bg-white text-zinc-900 shadow-sm'
-                        : 'text-zinc-500'
+                        ? 'bg-white text-ink-700 shadow-sm'
+                        : 'text-ink-400'
                     }`}
                   >
                     {m.label}
@@ -805,12 +805,12 @@ export default function Orders() {
                             <span className="w-2 h-2 rounded-full bg-red-500 voice-active inline-block" />
                             Sun raha hoon
                           </p>
-                          <p className="text-[11px] text-zinc-400 mt-0.5">Tap mic again to stop</p>
+                          <p className="text-[11px] text-ink-400 mt-0.5">Tap mic again to stop</p>
                         </>
                       ) : (
                         <>
-                          <p className="text-sm font-bold text-zinc-800">Tap mic, fir bolo</p>
-                          <p className="text-[11px] text-zinc-400 mt-0.5">
+                          <p className="text-sm font-bold text-ink-700">Tap mic, fir bolo</p>
+                          <p className="text-[11px] text-ink-400 mt-0.5">
                             "do Maggi, ek kg aata, teen Parle-G"
                           </p>
                         </>
@@ -823,11 +823,11 @@ export default function Orders() {
                       replaces it. Indented, italic, mono-ish so it reads as a
                       transcript rather than a heading. */}
                   {voiceInterim && (
-                    <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2">
-                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-0.5">
+                    <div className="rounded-xl bg-kirana-50 border border-kirana-100 px-3 py-2">
+                      <p className="text-[10px] font-bold text-kirana-700 uppercase tracking-wider mb-0.5">
                         Transcript
                       </p>
-                      <p className="text-sm text-emerald-900 italic leading-relaxed">{voiceInterim}…</p>
+                      <p className="text-sm text-kirana-900 italic leading-relaxed">{voiceInterim}…</p>
                     </div>
                   )}
                 </div>
@@ -851,17 +851,17 @@ export default function Orders() {
                     autoFocus
                   />
                   {pasteMsg.trim().length >= 4 && (
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 px-1">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-400 px-1">
                       {aiParsing ? (
                         <>
-                          <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
-                          <span className="text-emerald-600">AI parsing…</span>
+                          <span className="w-3 h-3 rounded-full border-2 border-cream-200 border-t-kirana-500 animate-spin" />
+                          <span className="text-kirana-600">AI parsing…</span>
                         </>
                       ) : (
                         <>
-                          <span className="text-emerald-500">✦</span>
+                          <span className="text-kirana-500">✦</span>
                           <span>Auto-parses jab tum likhna band karte ho</span>
-                          <button onClick={handleParse} className="ml-auto text-emerald-600 underline">
+                          <button onClick={handleParse} className="ml-auto text-kirana-600 underline">
                             Parse abhi
                           </button>
                         </>
@@ -872,8 +872,8 @@ export default function Orders() {
               )}
 
               {aiParsing && aiMode !== 'paste' && (
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
-                  <span className="w-3 h-3 rounded-full border-2 border-zinc-300 border-t-emerald-500 animate-spin" />
+                <div className="flex items-center gap-2 text-xs font-bold text-kirana-700 px-3 py-2 rounded-xl bg-kirana-50 border border-kirana-100">
+                  <span className="w-3 h-3 rounded-full border-2 border-cream-200 border-t-kirana-500 animate-spin" />
                   AI items match kar raha hai…
                 </div>
               )}
@@ -901,7 +901,7 @@ export default function Orders() {
               {(parsedItems.length > 0 || unrecognised.length > 0) && (
                 <div className="card p-0 overflow-hidden">
                   <div className="px-4 py-2 border-b border-cream-100 bg-cream-50">
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">
                       AI ne dhundha ({parsedItems.length} matched, {unrecognised.length} unmatched)
                     </p>
                   </div>
@@ -932,7 +932,7 @@ export default function Orders() {
               <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100 flex gap-2">
                 <button
                   onClick={cancelAIFlow}
-                  className="px-4 py-3.5 rounded-2xl text-sm font-bold text-zinc-500 active:bg-cream-100 active:scale-[0.98] transition-transform"
+                  className="px-4 py-3.5 rounded-2xl text-sm font-bold text-ink-400 active:bg-cream-100 active:scale-[0.98] transition-transform"
                 >
                   Cancel
                 </button>
@@ -956,17 +956,17 @@ export default function Orders() {
                 onClick={() => setStep('items')}
                 className="card w-full text-left flex items-center gap-3 active:bg-cream-50 transition-colors"
               >
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <ShoppingBag size={16} className="text-emerald-600" />
+                <div className="w-9 h-9 rounded-xl bg-kirana-50 flex items-center justify-center flex-shrink-0">
+                  <ShoppingBag size={16} className="text-kirana-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-zinc-900">{itemCount} item · ₹{total.toFixed(0)}</p>
-                  <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                  <p className="text-sm font-bold text-ink-700">{itemCount} item · ₹{total.toFixed(0)}</p>
+                  <p className="text-[11px] text-ink-400 mt-0.5 truncate">
                     {parsedItems.slice(0, 3).map(i => i.productName).join(', ')}
                     {itemCount > 3 && ` +${itemCount - 3} aur`}
                   </p>
                 </div>
-                <span className="text-[11px] font-bold text-emerald-600">Edit ↑</span>
+                <span className="text-[11px] font-bold text-kirana-600">Edit ↑</span>
               </button>
 
               {/* ── Customer ─────────────────────────────────────────── */}
@@ -1011,7 +1011,7 @@ export default function Orders() {
                 <div>
                   <label className="field-label">Paisa diya</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-semibold">₹</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400 text-sm font-semibold">₹</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -1023,7 +1023,7 @@ export default function Orders() {
                     />
                     <button
                       onClick={() => setPaid(total.toFixed(0))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 text-xs font-extrabold px-2 py-1 rounded-md active:bg-emerald-50"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-kirana-600 text-xs font-extrabold px-2 py-1 rounded-xl active:bg-kirana-50"
                     >
                       PURA
                     </button>
@@ -1034,18 +1034,18 @@ export default function Orders() {
                   overpaid
                     ? 'bg-red-50 border border-red-100'
                     : remaining > 0
-                      ? 'bg-amber-50/60'
-                      : 'bg-emerald-50/60'
+                      ? 'bg-saffron-50/60'
+                      : 'bg-kirana-50/60'
                 }`}>
-                  <span className="font-semibold text-zinc-600">
+                  <span className="font-semibold text-ink-600">
                     {overpaid ? 'Zyada paise diye' : remaining > 0 ? 'Bakaya (udhaar pe jaayega)' : 'Pura paid hua'}
                   </span>
                   <span className={`font-extrabold tabular-nums ${
                     overpaid
                       ? 'text-red-600'
                       : remaining > 0
-                        ? 'text-amber-600'
-                        : 'text-emerald-600'
+                        ? 'text-saffron-600'
+                        : 'text-kirana-600'
                   }`}>
                     {overpaid
                       ? `−₹${(paidNum - total).toFixed(0)}`
@@ -1054,7 +1054,7 @@ export default function Orders() {
                 </div>
 
                 {customerPhone && (
-                  <label className="flex items-center gap-2 text-xs text-zinc-500 cursor-pointer select-none px-1 pt-0.5">
+                  <label className="flex items-center gap-2 text-xs text-ink-400 cursor-pointer select-none px-1 pt-0.5">
                     <input
                       type="checkbox"
                       checked={sendWaReceipt}
@@ -1070,7 +1070,7 @@ export default function Orders() {
               <div className="sticky bottom-0 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-white border-t border-cream-100 flex gap-2">
                 <button
                   onClick={() => setStep('items')}
-                  className="px-4 py-3.5 rounded-2xl text-sm font-bold text-zinc-500 active:bg-cream-100 active:scale-[0.98] transition-transform"
+                  className="px-4 py-3.5 rounded-2xl text-sm font-bold text-ink-400 active:bg-cream-100 active:scale-[0.98] transition-transform"
                 >
                   ← Back
                 </button>
@@ -1082,7 +1082,7 @@ export default function Orders() {
                   <Check size={16} />
                   Save Order — ₹{total.toFixed(0)}
                   {remaining > 0 && !overpaid && (
-                    <span className="text-amber-100 font-bold ml-0.5">· ₹{remaining.toFixed(0)} udhaar</span>
+                    <span className="text-saffron-100 font-bold ml-0.5">· ₹{remaining.toFixed(0)} udhaar</span>
                   )}
                 </button>
               </div>
@@ -1138,11 +1138,11 @@ export default function Orders() {
       {filtered.length === 0 && (
         <div className="empty-state">
           <div className="empty-state-icon">
-            <ShoppingBag size={28} strokeWidth={1.4} className="text-zinc-300" />
+            <ShoppingBag size={28} strokeWidth={1.4} className="text-ink-300" />
           </div>
-          <p className="text-sm font-semibold text-zinc-400">Koi order nahi hai abhi</p>
-          <p className="text-xs text-zinc-300">Naya Order pe tap karke pehla order add karein</p>
-          <p className="text-[11px] text-zinc-300 mt-3">💡 Order card ko right swipe karein status badhaane ke liye</p>
+          <p className="text-sm font-semibold text-ink-400">Koi order nahi hai abhi</p>
+          <p className="text-xs text-ink-300">Naya Order pe tap karke pehla order add karein</p>
+          <p className="text-[11px] text-ink-300 mt-3">💡 Order card ko right swipe karein status badhaane ke liye</p>
         </div>
       )}
 
@@ -1168,7 +1168,7 @@ function OrderGroup({ label, orders, expandedId, setExpandedId, updateOrder, del
   return (
     <div className="space-y-1.5">
       <p className="section-label">{label}</p>
-      <div className="card p-0 overflow-hidden divide-y divide-zinc-50">
+      <div className="card p-0 overflow-hidden divide-y divide-cream-100">
         {orders.map(order => (
           <OrderCard
             key={order.id}
@@ -1241,13 +1241,13 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
     <div className="px-4 py-3.5 space-y-3">
       {/* Row */}
       <div className="flex items-start gap-3">
-        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${STATUS_DOT[order.status] || 'bg-zinc-300'}`} />
+        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${STATUS_DOT[order.status] || 'bg-ink-300'}`} />
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-zinc-900 text-sm">{order.customerName}</p>
-          <p className="text-xs text-zinc-400 mt-0.5">{time} · {order.items?.length || 0} items</p>
+          <p className="font-semibold text-ink-700 text-sm">{order.customerName}</p>
+          <p className="text-xs text-ink-400 mt-0.5">{time} · {order.items?.length || 0} items</p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="font-bold text-zinc-900 text-sm">₹{order.total || 0}</p>
+          <p className="font-bold text-ink-700 text-sm">₹{order.total || 0}</p>
           <button onClick={() => { setShowStatusPicker(!showStatusPicker); setNotifyLink(null) }} className="mt-1">
             <span className={STATUS_COLOR[order.status]}>{STATUS_LABEL[order.status]}</span>
           </button>
@@ -1261,8 +1261,8 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
             <button
               key={s}
               onClick={() => changeStatus(s)}
-              className={`py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                order.status === s ? 'bg-emerald-500 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+              className={`py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                order.status === s ? 'bg-kirana-500 text-white' : 'bg-cream-100 text-ink-600 hover:bg-cream-200'
               }`}
             >
               {STATUS_LABEL[s]}
@@ -1273,9 +1273,9 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
 
       {/* Notification prompt — appears after status change to packed / delivered */}
       {notifyLink && (
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5">
+        <div className="flex items-center gap-2 bg-kirana-50 border border-kirana-100 rounded-xl px-3 py-2.5">
           <WAButton href={notifyLink} label={notifyLabel} size="sm" />
-          <button onClick={() => setNotifyLink(null)} className="ml-auto text-zinc-300 hover:text-zinc-500 transition-colors">
+          <button onClick={() => setNotifyLink(null)} className="ml-auto text-ink-300 hover:text-ink-400 transition-colors">
             <X size={14} />
           </button>
         </div>
@@ -1284,7 +1284,7 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
       {/* Expand toggle */}
       <button
         onClick={onExpand}
-        className="w-full flex items-center justify-between text-xs text-zinc-400 font-medium pt-1 border-t border-zinc-50"
+        className="w-full flex items-center justify-between text-xs text-ink-400 font-medium pt-1 border-t border-cream-50"
       >
         <span>{expanded ? 'Hide items' : `View ${order.items?.length || 0} items`}</span>
         {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -1295,12 +1295,12 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
         <div className="space-y-1.5">
           {order.items?.map((item, i) => (
             <div key={i} className="flex justify-between text-sm">
-              <span className="text-zinc-600">{item.productName} × {item.qty} {item.unit}</span>
-              <span className="font-semibold text-zinc-800">₹{(item.price * item.qty).toFixed(0)}</span>
+              <span className="text-ink-600">{item.productName} × {item.qty} {item.unit}</span>
+              <span className="font-semibold text-ink-700">₹{(item.price * item.qty).toFixed(0)}</span>
             </div>
           ))}
 
-          <div className="flex gap-2 pt-2 border-t border-zinc-50 flex-wrap">
+          <div className="flex gap-2 pt-2 border-t border-cream-50 flex-wrap">
             {order.customerPhone && (
               <WAButton
                 href={sendOrderConfirmation(order.customerPhone, order.customerName, order.items || [], order.total, { upiId, shopName })}
@@ -1327,7 +1327,7 @@ function OrderCard({ order, expanded, onExpand, updateOrder, deleteOrder, toast 
             )}
             <button
               onClick={() => { if (window.confirm('Delete this order?')) deleteOrder() }}
-              className="text-xs font-semibold text-red-500 bg-red-50 px-3 py-2 rounded-lg"
+              className="text-xs font-semibold text-red-500 bg-red-50 px-3 py-2 rounded-xl"
             >
               Delete
             </button>
@@ -1359,28 +1359,28 @@ function UnrecognisedItem({ item, products = [], onAssignExisting, onAddToCatalo
   const rawLine = item.originalLine || item.productName || ''
 
   return (
-    <div className="bg-amber-50/70 rounded-xl p-3 space-y-2.5 animate-fade-up border border-amber-100">
+    <div className="bg-saffron-50/70 rounded-xl p-3 space-y-2.5 animate-fade-up border border-saffron-100">
       {/* Header line — original text + qty stepper + close */}
       <div className="flex items-start gap-2">
-        <AlertCircle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+        <AlertCircle size={15} className="text-saffron-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-saffron-700">
             Match nahi mila
           </p>
-          <p className="text-sm font-semibold text-zinc-800 truncate">"{rawLine}"</p>
+          <p className="text-sm font-semibold text-ink-700 truncate">"{rawLine}"</p>
         </div>
-        <div className="flex items-center bg-white border border-amber-200 rounded-lg overflow-hidden flex-shrink-0">
+        <div className="flex items-center bg-white border border-saffron-200 rounded-xl overflow-hidden flex-shrink-0">
           <button
             onClick={() => setQty(Math.max(1, qty - 1))}
-            className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-amber-50"
+            className="w-7 h-7 flex items-center justify-center text-ink-400 active:bg-saffron-50"
             aria-label="Kam"
           >
             <Minus size={12} />
           </button>
-          <span className="min-w-[22px] text-center text-xs font-bold text-zinc-800 tabular-nums">{qty}</span>
+          <span className="min-w-[22px] text-center text-xs font-bold text-ink-700 tabular-nums">{qty}</span>
           <button
             onClick={() => setQty(qty + 1)}
-            className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-amber-50"
+            className="w-7 h-7 flex items-center justify-center text-ink-400 active:bg-saffron-50"
             aria-label="Zyada"
           >
             <Plus size={12} />
@@ -1388,7 +1388,7 @@ function UnrecognisedItem({ item, products = [], onAssignExisting, onAddToCatalo
         </div>
         <button
           onClick={onSkip}
-          className="w-7 h-7 flex items-center justify-center text-zinc-300 active:text-red-400 flex-shrink-0"
+          className="w-7 h-7 flex items-center justify-center text-ink-300 active:text-red-400 flex-shrink-0"
           aria-label="Skip"
           title="Hata do"
         >
@@ -1401,13 +1401,13 @@ function UnrecognisedItem({ item, products = [], onAssignExisting, onAddToCatalo
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setMode('pick')}
-            className="py-2 px-3 bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+            className="py-2 px-3 bg-kirana-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
           >
             <Search size={13} /> Catalog se chunein
           </button>
           <button
             onClick={() => setMode('new')}
-            className="py-2 px-3 bg-white border border-amber-200 text-amber-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+            className="py-2 px-3 bg-white border border-saffron-200 text-saffron-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
           >
             <Plus size={13} /> Naya saamaan
           </button>
@@ -1463,7 +1463,7 @@ function UnrecPickFromCatalog({ products, initialQuery, onPick, onCancel }) {
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
         <input
           autoFocus
           className="input-field pl-9 py-2 text-sm"
@@ -1473,32 +1473,32 @@ function UnrecPickFromCatalog({ products, initialQuery, onPick, onCancel }) {
         />
         <button
           onClick={onCancel}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-zinc-400 px-2 py-1 rounded active:bg-zinc-100"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-ink-400 px-2 py-1 rounded active:bg-cream-100"
         >
           Wapas
         </button>
       </div>
       {matches.length > 0 ? (
-        <div className="bg-white rounded-xl border border-amber-100 overflow-hidden divide-y divide-cream-50">
+        <div className="bg-white rounded-xl border border-saffron-100 overflow-hidden divide-y divide-cream-50">
           {matches.map(p => (
             <button
               key={p.id}
               onClick={() => onPick(p)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-left active:bg-amber-50/60"
+              className="w-full flex items-center gap-2 px-3 py-2 text-left active:bg-saffron-50/60"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-zinc-900 truncate">{p.name}</p>
-                <p className="text-[10px] text-zinc-400 mt-0.5">
+                <p className="text-sm font-semibold text-ink-700 truncate">{p.name}</p>
+                <p className="text-[10px] text-ink-400 mt-0.5">
                   ₹{p.price} / {p.unit}
                   {!p.inStock && <span className="ml-1.5 text-red-500 font-bold">Khatam</span>}
                 </p>
               </div>
-              <Check size={14} className="text-emerald-500 flex-shrink-0" />
+              <Check size={14} className="text-kirana-500 flex-shrink-0" />
             </button>
           ))}
         </div>
       ) : (
-        <p className="text-xs text-zinc-500 px-1">
+        <p className="text-xs text-ink-400 px-1">
           Koi match nahi. Naya saamaan add karne ke liye "Wapas" → "Naya saamaan" daboh.
         </p>
       )}
@@ -1537,7 +1537,7 @@ function UnrecAddNew({ initialName, qty, onAddToCatalog, onAddOneOff, onCancel }
         <button
           onClick={() => valid && onAddToCatalog(name.trim(), numPrice)}
           disabled={!valid}
-          className="py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+          className="py-2 bg-kirana-500 text-white rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
           title="Catalog me hamesha ke liye save"
         >
           Catalog me save
@@ -1545,14 +1545,14 @@ function UnrecAddNew({ initialName, qty, onAddToCatalog, onAddOneOff, onCancel }
         <button
           onClick={() => valid && onAddOneOff(name.trim(), numPrice)}
           disabled={!valid}
-          className="py-2 bg-white border border-amber-200 text-amber-700 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
+          className="py-2 bg-white border border-saffron-200 text-saffron-700 rounded-xl text-xs font-bold disabled:opacity-40 active:scale-95 transition-transform"
           title="Sirf is order ke liye, catalog me save nahi hoga"
         >
           Sirf abhi
         </button>
         <button
           onClick={onCancel}
-          className="px-3 py-2 text-zinc-400 active:text-zinc-700 text-xs font-bold"
+          className="px-3 py-2 text-ink-400 active:text-ink-600 text-xs font-bold"
         >
           Wapas
         </button>
@@ -1565,21 +1565,21 @@ function UnrecAddNew({ initialName, qty, onAddToCatalog, onAddOneOff, onCancel }
 
 function SumCard({ icon, label, value, sub, color }) {
   const colors = {
-    emerald: 'text-emerald-600 bg-emerald-500/10',
+    emerald: 'text-kirana-600 bg-kirana-500/10',
     sky:     'text-sky-600 bg-sky-500/10',
     violet:  'text-violet-600 bg-violet-500/10',
-    orange:  'text-orange-600 bg-orange-500/10',
-    amber:   'text-amber-600 bg-amber-500/10',
-    zinc:    'text-zinc-400 bg-zinc-500/10',
+    orange:  'text-saffron-600 bg-saffron-500/10',
+    amber:   'text-saffron-600 bg-saffron-500/10',
+    zinc:    'text-ink-400 bg-ink-400/10',
   }
   return (
     <div className="card-elevated text-left animate-fade-up">
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${colors[color] || colors.zinc}`}>
         {icon}
       </div>
-      <p className="text-xl font-extrabold text-zinc-900 tracking-tight tabular-nums leading-none">{value}</p>
-      <p className="text-[10px] font-bold text-zinc-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
-      <p className="text-[11px] text-zinc-400 mt-0.5 font-medium">{sub}</p>
+      <p className="text-xl font-extrabold text-ink-700 tracking-tight tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] font-bold text-ink-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
+      <p className="text-[11px] text-ink-400 mt-0.5 font-medium">{sub}</p>
     </div>
   )
 }
@@ -1605,38 +1605,38 @@ function CartRow({ item, onSwap, onQty, onRemove }) {
         className="flex-1 min-w-0 text-left active:opacity-70"
         title="Tap to swap this item"
       >
-        <p className="font-semibold text-zinc-800 text-sm truncate">{item.productName}</p>
-        <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+        <p className="font-semibold text-ink-700 text-sm truncate">{item.productName}</p>
+        <p className="text-[10px] text-ink-400 truncate mt-0.5">
           ₹{item.price} / {item.unit}
           {item.sourceLine && <> · from: "{item.sourceLine}"</>}
           {!item.inStock && <span className="ml-1 text-red-500 font-bold">OOS</span>}
         </p>
       </button>
-      <div className="flex items-center bg-white border border-cream-200 rounded-lg overflow-hidden flex-shrink-0">
+      <div className="flex items-center bg-white border border-cream-200 rounded-xl overflow-hidden flex-shrink-0">
         <button
           onClick={() => onQty(Math.max(1, (item.qty || 1) - 1))}
-          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
+          className="w-7 h-7 flex items-center justify-center text-ink-400 active:bg-cream-100"
           aria-label="Kam karein"
         >
           <Minus size={13} />
         </button>
-        <span className="min-w-[24px] text-center text-sm font-bold text-zinc-800 tabular-nums">
+        <span className="min-w-[24px] text-center text-sm font-bold text-ink-700 tabular-nums">
           {item.qty}
         </span>
         <button
           onClick={() => onQty((item.qty || 1) + 1)}
-          className="w-7 h-7 flex items-center justify-center text-zinc-500 active:bg-cream-100"
+          className="w-7 h-7 flex items-center justify-center text-ink-400 active:bg-cream-100"
           aria-label="Zyada karein"
         >
           <Plus size={13} />
         </button>
       </div>
-      <span className="text-xs font-bold text-zinc-700 tabular-nums w-12 text-right flex-shrink-0">
+      <span className="text-xs font-bold text-ink-600 tabular-nums w-12 text-right flex-shrink-0">
         ₹{(item.price * item.qty).toFixed(0)}
       </span>
       <button
         onClick={onRemove}
-        className="text-zinc-300 active:text-red-400 flex-shrink-0"
+        className="text-ink-300 active:text-red-400 flex-shrink-0"
         aria-label="Remove item"
       >
         <X size={15} />
@@ -1665,7 +1665,7 @@ function CompactVoiceTile({ onResult, onInterim }) {
 
   if (!isSpeechSupported()) {
     return (
-      <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-zinc-50 text-zinc-300 border border-cream-200 cursor-not-allowed">
+      <div className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-cream-50 text-ink-300 border border-cream-200 cursor-not-allowed">
         <X size={16} />
         <span className="text-[10px] font-bold mt-1 leading-none">Voice ✕</span>
       </div>
@@ -1740,7 +1740,7 @@ function CompactVoiceTile({ onResult, onInterim }) {
       className={`flex flex-col items-center justify-center py-2.5 rounded-xl transition-colors border select-none ${
         listening
           ? 'bg-red-500 text-white border-red-500 voice-active'
-          : 'bg-white text-zinc-700 border-cream-200 active:bg-cream-50'
+          : 'bg-white text-ink-600 border-cream-200 active:bg-cream-50'
       }`}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1789,11 +1789,11 @@ function ProductSearchAdd({ products, onAdd, onAddCustom }) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1">
+      <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1">
         Saamaan add karein
       </p>
       <div className="relative">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
         <input
           className="input-field pl-10 text-sm"
           placeholder="Naam likhke ek-ek karke add karein…"
@@ -1805,7 +1805,7 @@ function ProductSearchAdd({ products, onAdd, onAddCustom }) {
         {q && (
           <button
             onMouseDown={e => { e.preventDefault(); setQ(''); setOpen(false) }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-400"
           >
             <X size={14} />
           </button>
@@ -1818,16 +1818,16 @@ function ProductSearchAdd({ products, onAdd, onAddCustom }) {
               <button
                 key={p.id}
                 onMouseDown={e => { e.preventDefault(); onAdd(p); setQ(''); setOpen(false) }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-50 active:bg-zinc-100 transition-colors border-b border-zinc-50 last:border-0"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-cream-50 active:bg-cream-100 transition-colors border-b border-cream-50 last:border-0"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-900 truncate">{p.name}</p>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                  <p className="text-sm font-semibold text-ink-700 truncate">{p.name}</p>
+                  <p className="text-[11px] text-ink-400 mt-0.5">
                     ₹{p.price} / {p.unit}
                     {!p.inStock && <span className="ml-2 text-red-500 font-bold">Khatam</span>}
                   </p>
                 </div>
-                <Plus size={14} className="text-emerald-500 flex-shrink-0" />
+                <Plus size={14} className="text-kirana-500 flex-shrink-0" />
               </button>
             ))}
             {/* "Add as new" — pushes the typed term into the unrecognised
@@ -1836,14 +1836,14 @@ function ProductSearchAdd({ products, onAdd, onAddCustom }) {
             {showAddNew && (
               <button
                 onMouseDown={e => { e.preventDefault(); onAddCustom(trimmed); setQ(''); setOpen(false) }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-left bg-amber-50/50 hover:bg-amber-50 active:bg-amber-100 transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-left bg-saffron-50/50 hover:bg-saffron-50 active:bg-saffron-100 transition-colors"
               >
-                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Plus size={14} className="text-amber-600" />
+                <div className="w-7 h-7 rounded-xl bg-saffron-100 flex items-center justify-center flex-shrink-0">
+                  <Plus size={14} className="text-saffron-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-900 truncate">"{trimmed}" add karein</p>
-                  <p className="text-[11px] text-amber-700 mt-0.5">Catalog me nahi hai — naya banayein ya assign karein</p>
+                  <p className="text-sm font-semibold text-ink-700 truncate">"{trimmed}" add karein</p>
+                  <p className="text-[11px] text-saffron-700 mt-0.5">Catalog me nahi hai — naya banayein ya assign karein</p>
                 </div>
               </button>
             )}
@@ -1876,7 +1876,7 @@ function RecentCustomerChips({ orders, customers, current, onPick }) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1">
+      <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1">
         Recent
       </p>
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
@@ -1888,8 +1888,8 @@ function RecentCustomerChips({ orders, customers, current, onPick }) {
               onClick={() => onPick(c)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
                 active
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-white border border-zinc-200 text-zinc-600 active:bg-zinc-50'
+                  ? 'bg-kirana-500 text-white'
+                  : 'bg-white border border-cream-200 text-ink-600 active:bg-cream-50'
               }`}
             >
               {c.name || c.phone}
@@ -1907,21 +1907,21 @@ function RecentCustomerChips({ orders, customers, current, onPick }) {
 // neither = upcoming step (outlined, muted)
 function StepDot({ num, label, active, done, clickable, onClick }) {
   const stateClass = done
-    ? 'bg-emerald-500 text-white border-emerald-500'
+    ? 'bg-kirana-500 text-white border-kirana-500'
     : active
-      ? 'bg-emerald-500 text-white border-emerald-500 ring-4 ring-emerald-100'
-      : 'bg-white text-zinc-400 border-cream-200'
+      ? 'bg-kirana-500 text-white border-kirana-500 ring-4 ring-kirana-100'
+      : 'bg-white text-ink-400 border-cream-200'
   return (
     <button
       type="button"
       onClick={clickable && onClick ? onClick : undefined}
       disabled={!clickable}
-      className={`flex items-center gap-2 px-1 py-0.5 rounded-lg ${clickable ? 'active:bg-cream-50' : 'cursor-default'}`}
+      className={`flex items-center gap-2 px-1 py-0.5 rounded-xl ${clickable ? 'active:bg-cream-50' : 'cursor-default'}`}
     >
       <span className={`w-6 h-6 rounded-full border-2 text-[11px] font-extrabold flex items-center justify-center transition-colors ${stateClass}`}>
         {done ? '✓' : num}
       </span>
-      <span className={`text-[11px] font-bold uppercase tracking-wider ${active ? 'text-zinc-900' : done ? 'text-emerald-700' : 'text-zinc-400'}`}>
+      <span className={`text-[11px] font-bold uppercase tracking-wider ${active ? 'text-ink-700' : done ? 'text-kirana-700' : 'text-ink-400'}`}>
         {label}
       </span>
     </button>
@@ -1960,7 +1960,7 @@ function CustomerSelectOnly({ customers, name, phone, search, showDrop, onSearch
         {search && (
           <button
             onMouseDown={e => { e.preventDefault(); onSearchChange('') }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-400"
           >
             <X size={14} />
           </button>
@@ -1974,15 +1974,15 @@ function CustomerSelectOnly({ customers, name, phone, search, showDrop, onSearch
                 onMouseDown={e => { e.preventDefault(); onSelect(c) }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-cream-50 active:bg-cream-100 border-b border-cream-50 last:border-0"
               >
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${(c.udhaar||0) > 0 ? 'bg-orange-100 text-orange-600' : 'bg-zinc-100 text-zinc-600'}`}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${(c.udhaar||0) > 0 ? 'bg-saffron-100 text-saffron-600' : 'bg-cream-100 text-ink-600'}`}>
                   {c.name[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-900 truncate">{c.name}</p>
-                  {c.phone && <p className="text-xs text-zinc-400">+91 {c.phone}</p>}
+                  <p className="text-sm font-semibold text-ink-700 truncate">{c.name}</p>
+                  {c.phone && <p className="text-xs text-ink-400">+91 {c.phone}</p>}
                 </div>
                 {(c.udhaar||0) > 0 && (
-                  <span className="text-xs font-bold text-orange-500 flex-shrink-0">₹{c.udhaar} due</span>
+                  <span className="text-xs font-bold text-saffron-500 flex-shrink-0">₹{c.udhaar} due</span>
                 )}
               </button>
             ))}
@@ -1992,14 +1992,14 @@ function CustomerSelectOnly({ customers, name, phone, search, showDrop, onSearch
 
       {/* Selected-customer chip OR "Naya customer" chip */}
       {selected && (
-        <p className="text-[11px] text-zinc-500 px-1">
+        <p className="text-[11px] text-ink-400 px-1">
           {phone
-            ? <>Phone: <span className="font-semibold text-zinc-700">+91 {phone}</span></>
-            : <span className="text-zinc-400 italic">Phone nahi hai — Khaata se add kar sakte hain</span>}
+            ? <>Phone: <span className="font-semibold text-ink-600">+91 {phone}</span></>
+            : <span className="text-ink-400 italic">Phone nahi hai — Khaata se add kar sakte hain</span>}
         </p>
       )}
       {isNew && (
-        <p className="text-[11px] text-emerald-600 font-semibold px-1">
+        <p className="text-[11px] text-kirana-600 font-semibold px-1">
           ✦ Naya customer — phone baad mein add kar sakte hain
         </p>
       )}
@@ -2021,7 +2021,7 @@ function CustomerPicker({ customers, name, phone, search, showDrop, onSearchChan
     <div className="space-y-3">
       {/* Search field */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-zinc-500">Customer *</label>
+        <label className="text-xs font-semibold text-ink-400">Customer *</label>
         <div className="relative">
           <input
             className="input-field pr-8"
@@ -2035,7 +2035,7 @@ function CustomerPicker({ customers, name, phone, search, showDrop, onSearchChan
           {search && (
             <button
               onMouseDown={e => { e.preventDefault(); onSearchChange('') }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-300 hover:text-zinc-500"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink-400"
             >
               <X size={14} />
             </button>
@@ -2048,17 +2048,17 @@ function CustomerPicker({ customers, name, phone, search, showDrop, onSearchChan
                 <button
                   key={c.id}
                   onMouseDown={e => { e.preventDefault(); onSelect(c) }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 active:bg-zinc-100 transition-colors border-b border-zinc-50 last:border-0"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-cream-50 active:bg-cream-100 transition-colors border-b border-cream-50 last:border-0"
                 >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${(c.udhaar||0) > 0 ? 'bg-orange-100 text-orange-600' : 'bg-zinc-100 text-zinc-600'}`}>
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-sm font-bold ${(c.udhaar||0) > 0 ? 'bg-saffron-100 text-saffron-600' : 'bg-cream-100 text-ink-600'}`}>
                     {c.name[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-zinc-900 truncate">{c.name}</p>
-                    {c.phone && <p className="text-xs text-zinc-400">{c.phone}</p>}
+                    <p className="text-sm font-semibold text-ink-700 truncate">{c.name}</p>
+                    {c.phone && <p className="text-xs text-ink-400">{c.phone}</p>}
                   </div>
                   {(c.udhaar||0) > 0 && (
-                    <span className="text-xs font-bold text-orange-500 flex-shrink-0">₹{c.udhaar} due</span>
+                    <span className="text-xs font-bold text-saffron-500 flex-shrink-0">₹{c.udhaar} due</span>
                   )}
                 </button>
               ))}
@@ -2070,7 +2070,7 @@ function CustomerPicker({ customers, name, phone, search, showDrop, onSearchChan
       {/* Phone — show once customer is typed/selected */}
       {(selected || name.trim()) && (
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-zinc-500">WhatsApp No.</label>
+          <label className="text-xs font-semibold text-ink-400">WhatsApp No.</label>
           <input
             className="input-field"
             type="tel"

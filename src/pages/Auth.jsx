@@ -98,11 +98,11 @@ export default function Auth({ onAuth }) {
 
       {/* Top brand strip */}
       <div className="flex flex-col items-center pt-16 pb-10 px-8 text-center">
-        <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-emerald-100">
+        <div className="w-14 h-14 bg-kirana-500 rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-kirana-100">
           <span className="text-white text-2xl">🛒</span>
         </div>
-        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Kirana Smart Orders</h1>
-        <p className="text-zinc-400 text-sm mt-1.5">Orders · Catalog · Udhaar · WhatsApp</p>
+        <h1 className="text-2xl font-bold text-ink-700 tracking-tight">Kirana Smart Orders</h1>
+        <p className="text-ink-400 text-sm mt-1.5">Orders · Catalog · Udhaar · WhatsApp</p>
       </div>
 
       {/* Card area */}
@@ -112,31 +112,31 @@ export default function Auth({ onAuth }) {
           {/* ── PHONE STEP ── */}
           {step === 'phone' && (
             <>
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-6">Sign in to continue</p>
+              <p className="text-xs font-semibold text-ink-400 uppercase tracking-widest mb-6">Sign in to continue</p>
 
               {/* Google */}
               <button
                 onClick={signInWithGoogle}
                 disabled={busy}
-                className="w-full flex items-center justify-center gap-3 bg-white border border-zinc-200 text-zinc-700
+                className="w-full flex items-center justify-center gap-3 bg-white border border-cream-200 text-ink-600
                            font-semibold py-3.5 rounded-xl text-sm active:scale-[0.97] transition-all
-                           hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-50 shadow-sm"
+                           hover:border-cream-200 hover:bg-cream-50 disabled:opacity-50 shadow-sm"
               >
                 {busy ? <Spinner /> : <><GoogleIcon />Continue with Google</>}
               </button>
 
               {/* Divider */}
               <div className="flex items-center gap-3 py-1">
-                <div className="flex-1 h-px bg-zinc-100" />
-                <span className="text-xs text-zinc-400">or</span>
-                <div className="flex-1 h-px bg-zinc-100" />
+                <div className="flex-1 h-px bg-cream-100" />
+                <span className="text-xs text-ink-400">or</span>
+                <div className="flex-1 h-px bg-cream-100" />
               </div>
 
               {/* Phone */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-zinc-500">Mobile Number</label>
+                <label className="text-xs font-semibold text-ink-400">Mobile Number</label>
                 <div className="flex gap-2">
-                  <div className="flex items-center justify-center bg-zinc-50 border border-zinc-200 rounded-xl px-3 text-zinc-500 text-sm font-semibold w-20 flex-shrink-0">
+                  <div className="flex items-center justify-center bg-cream-50 border border-cream-200 rounded-xl px-3 text-ink-400 text-sm font-semibold w-20 flex-shrink-0">
                     🇮🇳 +91
                   </div>
                   <input
@@ -160,7 +160,7 @@ export default function Auth({ onAuth }) {
                 {busy ? <Spinner /> : <><Phone size={16} />Send OTP</>}
               </button>
 
-              <p className="text-center text-xs text-zinc-400 pt-2">
+              <p className="text-center text-xs text-ink-400 pt-2">
                 By continuing you agree to our Terms of Service
               </p>
             </>
@@ -171,15 +171,15 @@ export default function Auth({ onAuth }) {
             <>
               <button
                 onClick={() => setStep('phone')}
-                className="flex items-center gap-2 text-zinc-500 text-sm font-medium mb-2 -ml-1"
+                className="flex items-center gap-2 text-ink-400 text-sm font-medium mb-2 -ml-1"
               >
                 <ArrowLeft size={15} /> Back
               </button>
 
               <div className="mb-6">
-                <h2 className="text-xl font-bold text-zinc-900">Enter OTP</h2>
-                <p className="text-zinc-400 text-sm mt-1">
-                  Sent to <span className="font-semibold text-zinc-600">+91 {phone}</span>
+                <h2 className="text-xl font-bold text-ink-700">Enter OTP</h2>
+                <p className="text-ink-400 text-sm mt-1">
+                  Sent to <span className="font-semibold text-ink-600">+91 {phone}</span>
                 </p>
               </div>
 
@@ -190,8 +190,8 @@ export default function Auth({ onAuth }) {
                     key={idx}
                     ref={el => otpRefs.current[idx] = el}
                     className="w-11 h-13 text-center text-xl font-bold border-2 rounded-xl
-                               focus:outline-none transition-all border-zinc-200 bg-zinc-50
-                               focus:border-emerald-400 focus:bg-white"
+                               focus:outline-none transition-all border-cream-200 bg-cream-50
+                               focus:border-kirana-400 focus:bg-white"
                     style={{ height: '52px' }}
                     type="tel"
                     inputMode="numeric"
@@ -214,11 +214,11 @@ export default function Auth({ onAuth }) {
 
               <div className="text-center pt-1">
                 {countdown > 0 ? (
-                  <p className="text-sm text-zinc-400">Resend in <span className="font-semibold text-zinc-600">{countdown}s</span></p>
+                  <p className="text-sm text-ink-400">Resend in <span className="font-semibold text-ink-600">{countdown}s</span></p>
                 ) : (
                   <button
                     onClick={() => { sendOtp(); setOtp(['','','','','','']) }}
-                    className="flex items-center gap-1.5 text-sm text-emerald-600 font-semibold mx-auto"
+                    className="flex items-center gap-1.5 text-sm text-kirana-600 font-semibold mx-auto"
                   >
                     <RotateCcw size={13} /> Resend OTP
                   </button>
@@ -231,15 +231,15 @@ export default function Auth({ onAuth }) {
           {step === 'setup' && (
             <>
               <div className="mb-6">
-                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-kirana-50 rounded-2xl flex items-center justify-center mb-4">
                   <span className="text-2xl">🎉</span>
                 </div>
-                <h2 className="text-xl font-bold text-zinc-900">You're in!</h2>
-                <p className="text-zinc-400 text-sm mt-1">What's your shop called?</p>
+                <h2 className="text-xl font-bold text-ink-700">You're in!</h2>
+                <p className="text-ink-400 text-sm mt-1">What's your shop called?</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-zinc-500">Shop Name</label>
+                <label className="text-xs font-semibold text-ink-400">Shop Name</label>
                 <input
                   className="input-field text-lg font-medium"
                   placeholder="e.g. Sharma General Store"

@@ -21,8 +21,8 @@ import { useRef, useState } from 'react'
  * Designed for mobile (touch). Desktop falls back to children clicks.
  */
 const COLORS = {
-  emerald: 'bg-emerald-500',
-  orange:  'bg-orange-500',
+  emerald: 'bg-kirana-500',
+  orange:  'bg-saffron-500',
   red:     'bg-red-500',
   sky:     'bg-sky-500',
   violet:  'bg-violet-500',
@@ -92,7 +92,7 @@ export default function SwipeableRow({
   const showingRight = dx > 0
   const showingLeft  = dx < 0
   const action = showingRight ? rightAction : showingLeft ? leftAction : null
-  const bg = action ? COLORS[action.color] || 'bg-zinc-400' : ''
+  const bg = action ? COLORS[action.color] || 'bg-ink-400' : ''
 
   return (
     <div className={`relative overflow-hidden ${className}`}>

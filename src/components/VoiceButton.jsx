@@ -62,7 +62,7 @@ export default function VoiceButton({ onResult, onInterim, size = 'md', label = 
         onPointerLeave={stop}
         title={listening ? 'Sun raha hoon…' : 'Bolo'}
         className={`${sizes[size] || sizes.xs} rounded-xl flex items-center justify-center transition-all
-          ${listening ? 'bg-red-500 voice-active' : 'bg-emerald-500 active:scale-95'}`}
+          ${listening ? 'bg-red-500 voice-active' : 'bg-kirana-500 active:scale-95'}`}
         aria-label={listening ? 'Listening…' : label}
       >
         {listening ? <MicOff size={iconSize} className="text-white" /> : <Mic size={iconSize} className="text-white" />}
@@ -83,10 +83,10 @@ export default function VoiceButton({ onResult, onInterim, size = 'md', label = 
         {listening ? <MicOff size={iconSize} className="text-white" /> : <Mic size={iconSize} className="text-white" />}
       </button>
       {interim && (
-        <p className="text-sm text-gray-500 italic text-center max-w-xs">{interim}…</p>
+        <p className="text-sm text-ink-400 italic text-center max-w-xs">{interim}…</p>
       )}
       {!listening && (
-        <span className="text-xs text-gray-400">Hold to speak</span>
+        <span className="text-xs text-ink-400">Hold to speak</span>
       )}
     </div>
   )

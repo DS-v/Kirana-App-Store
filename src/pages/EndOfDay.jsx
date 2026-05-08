@@ -72,11 +72,11 @@ _Powered by Kirana Smart Orders_`
 
         <div className="relative max-w-lg mx-auto flex items-start justify-between">
           <div>
-            <p className="text-amber-200 text-xs font-bold uppercase tracking-[0.12em]">
+            <p className="text-saffron-200 text-xs font-bold uppercase tracking-[0.12em]">
               {format(new Date(selectedDate), 'EEEE, d MMM yyyy')}
             </p>
             <h1 className="text-white text-2xl font-extrabold mt-1 tracking-tight">Day Summary</h1>
-            <p className="text-amber-100/80 text-xs mt-1 font-medium">
+            <p className="text-saffron-100/80 text-xs mt-1 font-medium">
               {totalOrders === 0 ? 'No orders recorded' : `${totalOrders} order${totalOrders !== 1 ? 's' : ''} · ₹${collected.toLocaleString('en-IN')} collected`}
             </p>
           </div>
@@ -114,21 +114,21 @@ _Powered by Kirana Smart Orders_`
       {debtors.length > 0 && (
         <div className="card space-y-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
-              <Users size={14} className="text-orange-500" />
+            <div className="w-7 h-7 rounded-xl bg-saffron-50 flex items-center justify-center flex-shrink-0">
+              <Users size={14} className="text-saffron-500" />
             </div>
-            <p className="font-bold text-zinc-900 text-sm">Udhaar Overview</p>
-            <span className="ml-auto font-bold text-orange-500">₹{totalDue}</span>
+            <p className="font-bold text-ink-700 text-sm">Udhaar Overview</p>
+            <span className="ml-auto font-bold text-saffron-500">₹{totalDue}</span>
           </div>
-          <div className="divide-y divide-zinc-50">
+          <div className="divide-y divide-cream-100">
             {debtors.slice(0, 4).map(c => (
               <div key={c.id} className="flex justify-between text-sm py-2">
-                <span className="text-zinc-600">{c.name}</span>
-                <span className="font-semibold text-zinc-900">₹{c.udhaar}</span>
+                <span className="text-ink-600">{c.name}</span>
+                <span className="font-semibold text-ink-700">₹{c.udhaar}</span>
               </div>
             ))}
             {debtors.length > 4 && (
-              <p className="text-xs text-zinc-400 pt-2">+{debtors.length - 4} more customers</p>
+              <p className="text-xs text-ink-400 pt-2">+{debtors.length - 4} more customers</p>
             )}
           </div>
         </div>
@@ -138,15 +138,15 @@ _Powered by Kirana Smart Orders_`
       {oosItems.length > 0 && (
         <div className="card space-y-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
               <AlertTriangle size={14} className="text-red-500" />
             </div>
-            <p className="font-bold text-zinc-900 text-sm">Out of Stock</p>
+            <p className="font-bold text-ink-700 text-sm">Out of Stock</p>
             <span className="ml-auto text-xs font-semibold text-red-500">{oosItems.length} items</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {oosItems.map(p => (
-              <span key={p.id} className="px-2.5 py-1 bg-zinc-100 text-zinc-600 rounded-lg text-xs font-medium">{p.name}</span>
+              <span key={p.id} className="px-2.5 py-1 bg-cream-100 text-ink-600 rounded-xl text-xs font-medium">{p.name}</span>
             ))}
           </div>
         </div>
@@ -155,20 +155,20 @@ _Powered by Kirana Smart Orders_`
       {/* Order breakdown */}
       {dayOrders.length > 0 && (
         <div className="card p-0 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-50">
-            <ShoppingBag size={15} className="text-zinc-400" />
-            <p className="font-bold text-zinc-900 text-sm">Order Breakdown</p>
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-cream-50">
+            <ShoppingBag size={15} className="text-ink-400" />
+            <p className="font-bold text-ink-700 text-sm">Order Breakdown</p>
           </div>
-          <div className="divide-y divide-zinc-50">
+          <div className="divide-y divide-cream-100">
             {dayOrders.map(o => (
               <div key={o.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-zinc-800 truncate">{o.customerName}</p>
-                  <p className="text-xs text-zinc-400 mt-0.5">{o.items?.length} items</p>
+                  <p className="text-sm font-semibold text-ink-700 truncate">{o.customerName}</p>
+                  <p className="text-xs text-ink-400 mt-0.5">{o.items?.length} items</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-sm font-bold text-zinc-900">₹{o.total}</span>
-                  <span className={STATUS_COLOR[o.status] || 'badge bg-zinc-100 text-zinc-500'}>{o.status}</span>
+                  <span className="text-sm font-bold text-ink-700">₹{o.total}</span>
+                  <span className={STATUS_COLOR[o.status] || 'badge bg-cream-100 text-ink-400'}>{o.status}</span>
                 </div>
               </div>
             ))}
@@ -179,7 +179,7 @@ _Powered by Kirana Smart Orders_`
       {/* Summary preview */}
       <div className="card space-y-2.5">
         <p className="section-label px-0.5">Summary Preview</p>
-        <pre className="text-xs text-zinc-600 whitespace-pre-wrap font-mono leading-relaxed bg-zinc-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
+        <pre className="text-xs text-ink-600 whitespace-pre-wrap font-mono leading-relaxed bg-cream-50 rounded-2xl px-4 py-3.5">{summaryText}</pre>
       </div>
 
       {/* Actions */}
@@ -204,12 +204,12 @@ _Powered by Kirana Smart Orders_`
 
 function StatCard({ icon, label, value, sub, color }) {
   const colors = {
-    emerald: 'text-emerald-600 bg-emerald-500/10',
+    emerald: 'text-kirana-600 bg-kirana-500/10',
     sky:     'text-sky-600 bg-sky-500/10',
     violet:  'text-violet-600 bg-violet-500/10',
-    orange:  'text-orange-600 bg-orange-500/10',
-    amber:   'text-amber-600 bg-amber-500/10',
-    zinc:    'text-zinc-400 bg-zinc-500/10',
+    orange:  'text-saffron-600 bg-saffron-500/10',
+    amber:   'text-saffron-600 bg-saffron-500/10',
+    zinc:    'text-ink-400 bg-ink-400/10',
   }
   const iconCls = colors[color] || colors.zinc
 
@@ -218,9 +218,9 @@ function StatCard({ icon, label, value, sub, color }) {
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${iconCls}`}>
         {icon}
       </div>
-      <p className="text-xl font-extrabold text-zinc-900 tracking-tight tabular-nums leading-none">{value}</p>
-      <p className="text-[10px] font-bold text-zinc-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
-      <p className="text-[11px] text-zinc-400 mt-0.5 font-medium">{sub}</p>
+      <p className="text-xl font-extrabold text-ink-700 tracking-tight tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] font-bold text-ink-400 mt-1.5 uppercase tracking-[0.08em]">{label}</p>
+      <p className="text-[11px] text-ink-400 mt-0.5 font-medium">{sub}</p>
     </div>
   )
 }
