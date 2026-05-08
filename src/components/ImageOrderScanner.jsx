@@ -195,7 +195,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
     // not two — same behavior either way.
     if (compact) {
       return (
-        <label className="flex flex-col items-center justify-center py-2.5 rounded-xl cursor-pointer transition-colors bg-white text-zinc-700 active:bg-cream-50 border border-cream-200">
+        <label className="flex flex-col items-center justify-center py-2.5 rounded-xl cursor-pointer transition-colors bg-white text-ink-600 active:bg-cream-50 border border-cream-200">
           <Camera size={16} className="text-violet-500" />
           <span className="text-[10px] font-bold mt-1 leading-none">Photo</span>
           <input
@@ -211,16 +211,16 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
     }
 
     return (
-      <div className="border border-dashed border-zinc-200 rounded-xl p-4 space-y-3">
+      <div className="border border-dashed border-cream-200 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-1.5">
           <Sparkles size={13} className="text-violet-400" />
-          <p className="text-xs font-semibold text-zinc-700">Scan order image with AI</p>
+          <p className="text-xs font-semibold text-ink-600">Scan order image with AI</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col items-center gap-2 py-4 bg-zinc-50 rounded-xl cursor-pointer active:scale-95 transition-transform hover:bg-zinc-100">
-            <Camera size={20} className="text-zinc-500" />
-            <span className="text-xs font-semibold text-zinc-600">Take Photo</span>
+          <label className="flex flex-col items-center gap-2 py-4 bg-cream-50 rounded-xl cursor-pointer active:scale-95 transition-transform hover:bg-cream-100">
+            <Camera size={20} className="text-ink-400" />
+            <span className="text-xs font-semibold text-ink-600">Take Photo</span>
             <input
               ref={cameraRef}
               type="file"
@@ -231,9 +231,9 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
             />
           </label>
 
-          <label className="flex flex-col items-center gap-2 py-4 bg-zinc-50 rounded-xl cursor-pointer active:scale-95 transition-transform hover:bg-zinc-100">
-            <ImageIcon size={20} className="text-zinc-500" />
-            <span className="text-xs font-semibold text-zinc-600">Upload Image</span>
+          <label className="flex flex-col items-center gap-2 py-4 bg-cream-50 rounded-xl cursor-pointer active:scale-95 transition-transform hover:bg-cream-100">
+            <ImageIcon size={20} className="text-ink-400" />
+            <span className="text-xs font-semibold text-ink-600">Upload Image</span>
             <input
               ref={fileRef}
               type="file"
@@ -244,7 +244,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
           </label>
         </div>
 
-        <p className="text-[10px] text-zinc-400 text-center">
+        <p className="text-[10px] text-ink-400 text-center">
           AI reads handwriting, abbreviations & Hindi — no OCR step needed
         </p>
       </div>
@@ -257,14 +257,14 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
       <div className="border border-violet-100 bg-violet-50/30 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-3">
           {imgSrc && (
-            <img src={imgSrc} alt="scan" className="w-14 h-14 object-cover rounded-lg flex-shrink-0 border border-zinc-100" />
+            <img src={imgSrc} alt="scan" className="w-14 h-14 object-cover rounded-xl flex-shrink-0 border border-ink-100" />
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-ink-700 flex items-center gap-1.5">
               <Sparkles size={12} className="text-violet-500" />
               AI reading image…
             </p>
-            <p className="text-[10px] text-zinc-400 mt-0.5">
+            <p className="text-[10px] text-ink-400 mt-0.5">
               Recognising text, matching products to your catalog
             </p>
           </div>
@@ -272,7 +272,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
         </div>
 
         {/* Indeterminate progress bar */}
-        <div className="w-full bg-zinc-100 rounded-full h-1 overflow-hidden">
+        <div className="w-full bg-cream-100 rounded-full h-1 overflow-hidden">
           <div className="h-1 bg-violet-400 rounded-full animate-[pulse_1.5s_ease-in-out_infinite] w-2/3" />
         </div>
       </div>
@@ -284,13 +284,13 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
     return (
       <div className="border border-red-100 bg-red-50/40 rounded-xl p-4 space-y-3">
         {imgSrc && (
-          <img src={imgSrc} alt="scan" className="w-16 h-16 object-cover rounded-lg border border-red-100" />
+          <img src={imgSrc} alt="scan" className="w-16 h-16 object-cover rounded-xl border border-red-100" />
         )}
         <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
           <AlertTriangle size={13} /> Vision AI failed
         </p>
         <p className="text-xs text-red-600">{errMsg}</p>
-        <button onClick={reset} className="text-xs font-semibold text-zinc-600 bg-zinc-100 px-3 py-2 rounded-lg w-full">
+        <button onClick={reset} className="text-xs font-semibold text-ink-600 bg-cream-100 px-3 py-2 rounded-xl w-full">
           Try again
         </button>
       </div>
@@ -303,18 +303,18 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
       {/* Header */}
       <div className="flex items-start gap-3">
         {imgSrc && (
-          <img src={imgSrc} alt="scan" className="w-14 h-14 object-cover rounded-lg flex-shrink-0 border border-zinc-100" />
+          <img src={imgSrc} alt="scan" className="w-14 h-14 object-cover rounded-xl flex-shrink-0 border border-ink-100" />
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-ink-700 flex items-center gap-1.5">
             <CheckCircle2 size={13} className="text-violet-500" />
             AI matched {aiItems.length} item{aiItems.length !== 1 ? 's' : ''}
           </p>
-          <p className="text-[10px] text-zinc-400 mt-0.5">
+          <p className="text-[10px] text-ink-400 mt-0.5">
             {aiUnrec.length > 0 ? `${aiUnrec.length} unmatched` : 'All items matched'}
           </p>
         </div>
-        <button onClick={reset} className="text-zinc-300 hover:text-zinc-500 flex-shrink-0">
+        <button onClick={reset} className="text-ink-300 hover:text-ink-400 flex-shrink-0">
           <X size={15} />
         </button>
       </div>
@@ -323,10 +323,10 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
       {aiItems.length > 0 && (
         <div className="space-y-1.5">
           {aiItems.map((it, i) => (
-            <div key={i} className="flex items-center justify-between bg-white border border-zinc-100 rounded-lg px-3 py-2">
+            <div key={i} className="flex items-center justify-between bg-white border border-ink-100 rounded-xl px-3 py-2">
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-zinc-800 truncate">{it.productName}</p>
-                <p className="text-[10px] text-zinc-400">{it.qty} {it.unit} · ₹{(it.price * it.qty).toFixed(0)}</p>
+                <p className="text-xs font-semibold text-ink-700 truncate">{it.productName}</p>
+                <p className="text-[10px] text-ink-400">{it.qty} {it.unit} · ₹{(it.price * it.qty).toFixed(0)}</p>
               </div>
               {!it.inStock && (
                 <span className="text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded ml-2">OOS</span>
@@ -339,10 +339,10 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
       {/* Unrecognised lines */}
       {aiUnrec.length > 0 && (
         <div className="space-y-1">
-          <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Not in catalog</p>
+          <p className="text-[10px] font-semibold text-saffron-600 uppercase tracking-wider">Not in catalog</p>
           {aiUnrec.map((u, i) => (
-            <div key={i} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              <p className="text-xs text-amber-700">{u.originalLine}</p>
+            <div key={i} className="bg-saffron-50 border border-saffron-100 rounded-xl px-3 py-2">
+              <p className="text-xs text-saffron-700">{u.originalLine}</p>
             </div>
           ))}
         </div>
@@ -359,7 +359,7 @@ export default function ImageOrderScanner({ onItemsReady, onError, compact = fal
         </button>
         <button
           onClick={reset}
-          className="bg-zinc-100 text-zinc-600 text-xs font-semibold px-4 py-2.5 rounded-xl active:scale-95 transition-transform"
+          className="bg-cream-100 text-ink-600 text-xs font-semibold px-4 py-2.5 rounded-xl active:scale-95 transition-transform"
         >
           Discard
         </button>

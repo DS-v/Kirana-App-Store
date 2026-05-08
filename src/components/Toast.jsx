@@ -22,7 +22,7 @@ export function ToastProvider({ children }) {
   const bg = {
     success: 'bg-green-50 border-green-200',
     error:   'bg-red-50 border-red-200',
-    info:    'bg-white border-gray-200',
+    info:    'bg-white border-cream-200',
   }
 
   return (
@@ -35,8 +35,8 @@ export function ToastProvider({ children }) {
             className={`flex items-center gap-3 px-4 py-3 rounded-2xl border shadow-md max-w-sm w-full pointer-events-auto ${bg[t.type]}`}
           >
             {icons[t.type]}
-            <span className="flex-1 text-sm font-medium text-gray-800">{t.msg}</span>
-            <button onClick={() => dismiss(t.id)} className="text-gray-400"><X size={16} /></button>
+            <span className="flex-1 text-sm font-medium text-ink-700">{t.msg}</span>
+            <button onClick={() => dismiss(t.id)} className="text-ink-400"><X size={16} /></button>
           </div>
         ))}
       </div>

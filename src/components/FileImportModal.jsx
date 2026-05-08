@@ -44,12 +44,12 @@ function DropZone({ onFile }) {
       <button
         type="button"
         onClick={() => cameraRef.current?.click()}
-        className="w-full flex items-center gap-3 bg-emerald-500 active:bg-emerald-600 text-white rounded-2xl px-4 py-4 transition-colors"
+        className="w-full flex items-center gap-3 bg-kirana-500 active:bg-kirana-600 text-white rounded-2xl px-4 py-4 transition-colors"
       >
         <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl flex-shrink-0">📸</span>
         <div className="flex-1 text-left">
           <p className="text-sm font-bold">Photo lo (camera)</p>
-          <p className="text-[11px] text-emerald-100/90">Price list ya rate card scan karein</p>
+          <p className="text-[11px] text-kirana-100/90">Price list ya rate card scan karein</p>
         </div>
       </button>
 
@@ -60,15 +60,15 @@ function DropZone({ onFile }) {
         onDrop={handleDrop}
         onClick={() => fileRef.current?.click()}
         className={`border-2 border-dashed rounded-2xl p-5 flex items-center gap-3 cursor-pointer transition-colors ${
-          drag ? 'border-violet-400 bg-violet-50' : 'border-zinc-200 hover:border-violet-300 hover:bg-zinc-50'
+          drag ? 'border-violet-400 bg-violet-50' : 'border-cream-200 hover:border-violet-300 hover:bg-cream-50'
         }`}
       >
-        <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
-          <Upload size={18} className="text-zinc-400" />
+        <div className="w-10 h-10 rounded-xl bg-cream-100 flex items-center justify-center flex-shrink-0">
+          <Upload size={18} className="text-ink-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-zinc-700">File chunein</p>
-          <p className="text-[11px] text-zinc-400">Excel · PDF · Word · Text · gallery photo</p>
+          <p className="text-sm font-semibold text-ink-600">File chunein</p>
+          <p className="text-[11px] text-ink-400">Excel · PDF · Word · Text · gallery photo</p>
         </div>
       </div>
 
@@ -104,13 +104,13 @@ function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
     <div className="space-y-2">
       <button
         onClick={() => onToggleAll(!allSelected)}
-        className="w-full flex items-center justify-between bg-zinc-50 rounded-xl px-3 py-2 text-xs font-bold text-zinc-600 active:bg-zinc-100"
+        className="w-full flex items-center justify-between bg-cream-50 rounded-xl px-3 py-2 text-xs font-bold text-ink-600 active:bg-cream-100"
       >
         <span className="flex items-center gap-2">
           <input type="checkbox" checked={allSelected} readOnly className="rounded pointer-events-none" />
           {allSelected ? 'Sab unselect karein' : 'Sab select karein'}
         </span>
-        <span className="text-zinc-400">{rows.filter(r => r.selected).length} / {rows.length}</span>
+        <span className="text-ink-400">{rows.filter(r => r.selected).length} / {rows.length}</span>
       </button>
 
       <div className="space-y-1.5">
@@ -118,7 +118,7 @@ function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
           <div
             key={i}
             className={`rounded-xl border bg-white px-3 py-2.5 ${
-              row.selected ? 'border-zinc-200' : 'border-zinc-100 opacity-50'
+              row.selected ? 'border-cream-200' : 'border-ink-100 opacity-50'
             }`}
           >
             <div className="flex items-start gap-2">
@@ -131,7 +131,7 @@ function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <input
-                    className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-violet-400"
+                    className="flex-1 min-w-0 border border-cream-200 rounded-xl px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-violet-400"
                     placeholder="Naam"
                     value={row.name}
                     onChange={e => onChange(i, 'name', e.target.value)}
@@ -139,7 +139,7 @@ function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
                   <input
                     type="number"
                     inputMode="numeric"
-                    className="w-20 border border-zinc-200 rounded-lg px-2 py-1.5 text-sm font-bold tabular-nums focus:outline-none focus:ring-1 focus:ring-violet-400"
+                    className="w-20 border border-cream-200 rounded-xl px-2 py-1.5 text-sm font-bold tabular-nums focus:outline-none focus:ring-1 focus:ring-violet-400"
                     placeholder="₹"
                     value={row.price}
                     onChange={e => onChange(i, 'price', parseFloat(e.target.value) || 0)}
@@ -147,14 +147,14 @@ function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <select
-                    className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                    className="flex-1 min-w-0 border border-cream-200 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
                     value={row.unit}
                     onChange={e => onChange(i, 'unit', e.target.value)}
                   >
                     {UNITS.map(u => <option key={u}>{u}</option>)}
                   </select>
                   <select
-                    className="flex-1 min-w-0 border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+                    className="flex-1 min-w-0 border border-cream-200 rounded-xl px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
                     value={row.category}
                     onChange={e => onChange(i, 'category', e.target.value)}
                   >
@@ -162,7 +162,7 @@ function PreviewList({ rows, onChange, onToggle, onToggleAll }) {
                   </select>
                   <button
                     onClick={() => onChange(i, '_delete', true)}
-                    className="w-8 h-7 flex items-center justify-center rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                    className="w-8 h-7 flex items-center justify-center rounded-xl text-ink-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
                     title="Hata do"
                   >
                     <Trash2 size={13} />
@@ -304,12 +304,12 @@ export default function FileImportModal({ onClose, addProduct }) {
       <div className="relative bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[92vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-ink-100 flex-shrink-0">
           <div>
-            <p className="font-bold text-zinc-900 text-sm">Import Products</p>
-            {fileName && <p className="text-xs text-zinc-400 mt-0.5">📁 {fileName}</p>}
+            <p className="font-bold text-ink-700 text-sm">Import Products</p>
+            {fileName && <p className="text-xs text-ink-400 mt-0.5">📁 {fileName}</p>}
           </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 transition-colors">
+          <button onClick={onClose} className="text-ink-400 hover:text-ink-600 transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -330,21 +330,21 @@ export default function FileImportModal({ onClose, addProduct }) {
               )}
 
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Supported formats</p>
+                <p className="text-xs font-semibold text-ink-400 uppercase tracking-wider">Supported formats</p>
                 <div className="grid grid-cols-2 gap-2">
                   {formats.map(f => (
-                    <div key={f.label} className="flex items-center gap-2.5 bg-zinc-50 rounded-xl px-3 py-2.5">
+                    <div key={f.label} className="flex items-center gap-2.5 bg-cream-50 rounded-xl px-3 py-2.5">
                       <span className="text-xl">{f.icon}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-semibold text-zinc-700">{f.label}</p>
+                          <p className="text-xs font-semibold text-ink-600">{f.label}</p>
                           {f.badge && (
                             <span className="text-[9px] font-bold bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                               <Sparkles size={8} /> {f.badge}
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-zinc-400">{f.desc}</p>
+                        <p className="text-[10px] text-ink-400">{f.desc}</p>
                       </div>
                     </div>
                   ))}
@@ -369,18 +369,18 @@ export default function FileImportModal({ onClose, addProduct }) {
           {isParsingPhase && (
             <div className="flex flex-col items-center py-10 gap-5">
               {imgPreview ? (
-                <img src={imgPreview} alt="scan" className="w-32 h-32 object-cover rounded-2xl border border-zinc-100 shadow-sm" />
+                <img src={imgPreview} alt="scan" className="w-32 h-32 object-cover rounded-2xl border border-ink-100 shadow-sm" />
               ) : (
                 <div className="w-16 h-16 rounded-2xl bg-violet-50 flex items-center justify-center">
                   <Sparkles size={28} className="text-violet-400" />
                 </div>
               )}
               <div className="text-center space-y-1">
-                <p className="font-semibold text-zinc-800 text-sm flex items-center gap-2 justify-center">
+                <p className="font-semibold text-ink-700 text-sm flex items-center gap-2 justify-center">
                   <Loader2 size={15} className="animate-spin text-violet-500" />
                   {statusMsg}
                 </p>
-                <p className="text-xs text-zinc-400">{fileName}</p>
+                <p className="text-xs text-ink-400">{fileName}</p>
                 {phase === 'parsing' && (
                   <p className="text-[10px] text-violet-500 font-medium">
                     AI reading content &amp; matching categories…
@@ -388,7 +388,7 @@ export default function FileImportModal({ onClose, addProduct }) {
                 )}
               </div>
               {/* Indeterminate bar */}
-              <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
+              <div className="w-full bg-cream-100 rounded-full h-1.5 overflow-hidden">
                 <div className="h-1.5 bg-violet-400 rounded-full w-1/2 animate-[pulse_1.5s_ease-in-out_infinite]" />
               </div>
             </div>
@@ -399,7 +399,7 @@ export default function FileImportModal({ onClose, addProduct }) {
             <>
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <p className="text-xs font-semibold text-zinc-700">
+                  <p className="text-xs font-semibold text-ink-600">
                     {rows.length} products · {selectedCount} selected
                   </p>
                   {aiSource && (
@@ -410,7 +410,7 @@ export default function FileImportModal({ onClose, addProduct }) {
                 </div>
                 <button
                   onClick={() => { setPhase('upload'); setRows([]); setFileName(''); setAiSource('') }}
-                  className="text-xs font-semibold text-zinc-500 bg-zinc-100 px-2.5 py-1.5 rounded-lg"
+                  className="text-xs font-semibold text-ink-400 bg-cream-100 px-2.5 py-1.5 rounded-xl"
                 >
                   Change file
                 </button>
@@ -423,13 +423,13 @@ export default function FileImportModal({ onClose, addProduct }) {
           {/* ── Importing ── */}
           {phase === 'importing' && (
             <div className="flex flex-col items-center py-16 gap-4">
-              <Loader2 size={32} className="text-emerald-500 animate-spin" />
-              <p className="font-semibold text-zinc-800 text-sm">
+              <Loader2 size={32} className="text-kirana-500 animate-spin" />
+              <p className="font-semibold text-ink-700 text-sm">
                 Importing {progress.done} / {progress.total}…
               </p>
-              <div className="w-full bg-zinc-100 rounded-full h-2 overflow-hidden">
+              <div className="w-full bg-cream-100 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-kirana-500 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${(progress.done / progress.total) * 100}%` }}
                 />
               </div>
@@ -439,12 +439,12 @@ export default function FileImportModal({ onClose, addProduct }) {
           {/* ── Done ── */}
           {phase === 'done' && (
             <div className="flex flex-col items-center py-16 gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center">
-                <CheckCircle size={28} className="text-emerald-500" />
+              <div className="w-14 h-14 rounded-2xl bg-kirana-50 flex items-center justify-center">
+                <CheckCircle size={28} className="text-kirana-500" />
               </div>
               <div className="text-center">
-                <p className="font-bold text-zinc-900">Import complete!</p>
-                <p className="text-sm text-zinc-500 mt-1">
+                <p className="font-bold text-ink-700">Import complete!</p>
+                <p className="text-sm text-ink-400 mt-1">
                   {progress.total} product{progress.total !== 1 ? 's' : ''} added to catalog
                 </p>
               </div>
@@ -457,7 +457,7 @@ export default function FileImportModal({ onClose, addProduct }) {
 
         {/* Footer — preview only */}
         {phase === 'preview' && (
-          <div className="px-4 py-3 border-t border-zinc-100 flex-shrink-0 flex gap-2">
+          <div className="px-4 py-3 border-t border-ink-100 flex-shrink-0 flex gap-2">
             <button onClick={onClose} className="btn-secondary py-2.5 text-sm" style={{ flex: '0 0 auto', width: 80 }}>
               Cancel
             </button>

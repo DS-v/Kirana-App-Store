@@ -43,12 +43,12 @@ export default function Onboarding() {
 
       {/* Setup form */}
       <div className="bg-white rounded-t-3xl px-6 pt-8 pb-10 shadow-2xl">
-        <h2 className="text-xl font-bold text-gray-800 mb-1">Let's set up your shop</h2>
-        <p className="text-gray-500 text-sm mb-6">Takes less than a minute</p>
+        <h2 className="text-xl font-bold text-ink-700 mb-1">Let's set up your shop</h2>
+        <p className="text-ink-400 text-sm mb-6">Takes less than a minute</p>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Shop Name</label>
+            <label className="block text-sm font-semibold text-ink-600 mb-1">Shop Name</label>
             <input
               className="input-field text-lg"
               placeholder="e.g. Sharma General Store"
@@ -58,9 +58,9 @@ export default function Onboarding() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Your WhatsApp Number</label>
+            <label className="block text-sm font-semibold text-ink-600 mb-1">Your WhatsApp Number</label>
             <div className="flex gap-2">
-              <div className="input-field w-14 text-center font-medium text-gray-600 flex items-center justify-center">+91</div>
+              <div className="input-field w-14 text-center font-medium text-ink-600 flex items-center justify-center">+91</div>
               <input
                 className="input-field flex-1 text-lg"
                 placeholder="9876543210"

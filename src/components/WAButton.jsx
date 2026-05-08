@@ -15,8 +15,8 @@ export default function WAButton({ href, label = 'Send via WhatsApp', size = 'sm
 
   const base =
     'inline-flex items-center justify-center gap-1.5 font-semibold ' +
-    'text-emerald-700 bg-emerald-50 rounded-xl transition-colors ' +
-    'hover:bg-emerald-100 active:scale-95 active:transition-transform'
+    'text-kirana-700 bg-kirana-50 rounded-xl transition-colors ' +
+    'hover:bg-kirana-100 active:scale-95 active:transition-transform'
 
   const sizes = {
     sm: 'text-xs px-3 py-2',

@@ -36,30 +36,30 @@ export default function IncomingMessageBanner({ onOpen }) {
   return (
     <div className="space-y-2">
       <p className="section-label flex items-center gap-1.5">
-        <MessageSquare size={12} className="text-emerald-500" />
+        <MessageSquare size={12} className="text-kirana-500" />
         {pending.length} new WhatsApp order{pending.length > 1 ? 's' : ''}
       </p>
 
       {pending.map(msg => (
         <div
           key={msg.id}
-          className="card border-emerald-100 bg-emerald-50/40 space-y-2.5"
+          className="card border-kirana-100 bg-kirana-50/40 space-y-2.5"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-zinc-900">
+              <p className="text-sm font-bold text-ink-700">
                 {msg.from_name || msg.from_phone}
               </p>
               {msg.from_name && (
-                <p className="text-xs text-zinc-400">+91 {msg.from_phone}</p>
+                <p className="text-xs text-ink-400">+91 {msg.from_phone}</p>
               )}
-              <p className="text-xs text-zinc-600 mt-1.5 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-ink-600 mt-1.5 line-clamp-2 leading-relaxed">
                 {msg.message}
               </p>
             </div>
             <button
               onClick={() => handleDismiss(msg)}
-              className="text-zinc-300 hover:text-zinc-500 transition-colors flex-shrink-0"
+              className="text-ink-300 hover:text-ink-400 transition-colors flex-shrink-0"
             >
               <X size={16} />
             </button>
@@ -67,7 +67,7 @@ export default function IncomingMessageBanner({ onOpen }) {
 
           <button
             onClick={() => handleOpen(msg)}
-            className="w-full text-center text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 py-2 rounded-lg transition-colors"
+            className="w-full text-center text-xs font-semibold text-kirana-700 bg-kirana-100 hover:bg-kirana-200 py-2 rounded-xl transition-colors"
           >
             Open as New Order →
           </button>

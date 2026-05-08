@@ -49,16 +49,16 @@ export default function BottomSheet({
       >
         {/* Drag handle */}
         <div className="flex flex-col items-center pt-2 pb-1 flex-shrink-0">
-          <span className="w-10 h-1 rounded-full bg-zinc-200" />
+          <span className="w-10 h-1 rounded-full bg-cream-200" />
         </div>
 
         {/* Header */}
         {(title || onClose) && (
-          <div className="flex items-center justify-between px-4 pt-1 pb-2 border-b border-zinc-50 flex-shrink-0">
-            <p className="font-bold text-zinc-900 text-base flex-1 truncate">{title}</p>
+          <div className="flex items-center justify-between px-4 pt-1 pb-2 border-b border-cream-50 flex-shrink-0">
+            <p className="font-bold text-ink-700 text-base flex-1 truncate">{title}</p>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-xl text-ink-400 hover:text-ink-600 hover:bg-cream-100 transition-colors"
             >
               <X size={16} />
             </button>
